@@ -30,17 +30,27 @@ android {
         targetSdk = 36
 
         // 应用版本号（每次发新版：versionCode 加 1，versionName 可以写 0.2.0）
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     signingConfigs {
-        // 我们的 minSdk = 26，Android Gradle Plugin 默认只给 debug 包做 v2 签名
-        // （v1 只在 minSdk < 24 时才默认开启，v3 只在 minSdk >= 28 时才默认开启）。
-        // 但部分国产 ROM 的安装器 / 安全检测只认传统的 JAR（v1）签名，
-        // 遇到"只有 v2"的包会直接报"解析包时出现错误"。
-        // 这里显式把 v1 / v2 / v3 三种签名全部打开，兼容性最好。
+        // 这是 debug 包的“签名钥匙”。默认情况下 Android Studio 和 CI 每次都会新生成一把，
+        // 于是两次构建的 APK 签名不一致，新版就没法覆盖安装旧版（会提示“应用未安装/签名不一致”）。
+        // 这里改成使用项目里自带的那把固定钥匙（app/debug.keystore），
+        // 以后每次构建的 APK 都能直接覆盖安装到上一版上。
+        // 注意：debug keystore 只是开发用的，不是机密；但也不能用来发布正式版本。
         getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+
+            // 我们的 minSdk = 26，Android Gradle Plugin 默认只给 debug 包做 v2 签名
+            // （v1 只在 minSdk < 24 时才默认开启，v3 只在 minSdk >= 28 时才默认开启）。
+            // 但部分国产 ROM 的安装器 / 安全检测只认传统的 JAR（v1）签名，
+            // 遇到“只有 v2”的包会直接报“解析包时出现错误”。
+            // 这里显式把 v1 / v2 / v3 三种签名全部打开，兼容性最好。
             enableV1Signing = true
             enableV2Signing = true
             enableV3Signing = true
@@ -99,6 +109,9 @@ dependencies {
     implementation(libs.compose.preview)
     implementation(libs.compose.material3)
     implementation(libs.compose.icons.core)
+
+    // 数据层：工作区列表的存储（DataStore Preferences，读写都是异步的）
+    implementation(libs.datastore.preferences)
 
     // 只在 debug 构建里引入：让 Android Studio 的 Preview 能正常显示界面
     debugImplementation(libs.compose.tooling)

@@ -33,12 +33,25 @@ plain-text-editor/                        ← 项目根目录（名字可以自�
 │       └── gradle-wrapper.properties     ← 声明使用 Gradle 8.13
 └── app/                                  ← 应用模块（真正装到手机上的东西）
     ├── build.gradle.kts                  ← 包名 / SDK 版本 / 依赖库
+    ├── debug.keystore                    ← 固定的调试签名钥匙（保证新版能覆盖安装旧版）
     ├── proguard-rules.pro                ← 混淆规则（暂时是空的）
     └── src/
         └── main/
             ├── AndroidManifest.xml       ← 应用说明书（名称、图标、入口）
             ├── java/com/example/plaintexteditor/
-            │   ├── MainActivity.kt                       ← 应用入口
+            │   ├── PlainTextEditorApp.kt                 ← 应用入口（提供全应用唯一的仓库实例）
+            │   ├── MainActivity.kt                       ← 主界面 Activity
+            │   ├── data/                                 ← 数据层（第二阶段新增，没有界面代码）
+            │   │   ├── model/
+            │   │   │   ├── FileItem.kt                   ← 一个文件/文件夹的信息
+            │   │   │   └── WorkspaceItem.kt              ← 一个工作区条目
+            │   │   ├── repository/
+            │   │   │   └── FileRepository.kt             ← 所有文件读写都在这里
+            │   │   ├── workspace/
+            │   │   │   └── WorkspaceStore.kt             ← 工作区列表的保存/读取（DataStore）
+            │   │   └── state/
+            │   │       ├── FileBrowserState.kt           ← “文件列表”状态盒子
+            │   │       └── WorkspaceState.kt             ← “工作区列表”状态盒子
             │   └── ui/
             │       ├── theme/
             │       │   ├── Color.kt                      ← 浅色/深色配色
@@ -238,6 +251,11 @@ composeBom = "2025.01.00"
    用文件管理器把它移动或复制到「下载 / Download」目录，再点它安装。
 4. 先卸载手机上可能已经存在的旧「纯文本编辑器」，签名不一致也会装不上。
 5. 最省事：直接下载仓库 **Releases** 页面里挂好的 APK（那是 APK 本体，不用解压）。
+
+**升级安装时提示“应用未安装 / 签名不一致”**
+v0.1.x 用的是 GitHub Actions 每次临时生成的调试密钥，所以那几版的签名互不相同。
+从 v0.2.0 开始，项目里自带了固定的调试密钥（`app/debug.keystore`），以后每一版都能直接覆盖安装。
+从 v0.1.1 升到 v0.2.0 这一次，请先卸载手机上的旧「纯文本编辑器」，再安装新版（只有这一次需要）。
 
 **界面能装能开，但点按钮没反应**
 这是第一阶段的预期行为：保存、查找、更多、浏览私有目录、设置都还是占位。
