@@ -34,6 +34,19 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        // 我们的 minSdk = 26，Android Gradle Plugin 默认只给 debug 包做 v2 签名
+        // （v1 只在 minSdk < 24 时才默认开启，v3 只在 minSdk >= 28 时才默认开启）。
+        // 但部分国产 ROM 的安装器 / 安全检测只认传统的 JAR（v1）签名，
+        // 遇到"只有 v2"的包会直接报"解析包时出现错误"。
+        // 这里显式把 v1 / v2 / v3 三种签名全部打开，兼容性最好。
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
+
     buildTypes {
         // debug 用默认配置即可：不混淆，可以直接装到手机上测试
         release {
