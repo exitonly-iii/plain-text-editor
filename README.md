@@ -223,6 +223,11 @@ composeBom = "2025.01.00"
 **构建失败，日志里有 `SDK location not found` 或许可证相关报错**
 工作流里已经包含「接受许可证」和「写入 local.properties」两个步骤；若是偶发网络问题，点 **Re-run all jobs** 重跑一次通常就好。
 
+**构建失败，日志里有 `Failed to find package 'tools'`**
+这是 `android-actions/setup-android@v3` 的问题：它默认会安装 `tools` 包，而 Google 已把它从 SDK 仓库移除，
+所以这一步会直接报错。本项目已经改用 `android-actions/setup-android@v4`（v4 的默认包只有 `platform-tools`）。
+如果你在别处复制到旧的 `@v3` 写法，把版本号改成 `@v4` 即可。
+
 **界面能装能开，但点按钮没反应**
 这是第一阶段的预期行为：保存、查找、更多、浏览私有目录、设置都还是占位。
 
