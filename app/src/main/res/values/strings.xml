@@ -119,4 +119,11 @@
     <string name="message_replaced_count">已替换 %1$d 处</string>
     <string name="message_replace_failed">无法替换：请检查正则表达式</string>
     <string name="panel_readonly_hint">当前文件处于只读模式，不能替换</string>
+
+    <!-- 行号（第八阶段） -->
+    <string name="status_line_count_format">约 %1$d 行</string>
+    <string name="status_line_number_format">行 %1$d</string>
+    <string name="status_line_number_placeholder">行 --</string>
+    <string name="status_line_number_hidden">行号已关</string>
+    <string name="action_toggle_current_line">显示当前行号</string>
 </resources>

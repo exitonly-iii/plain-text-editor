@@ -2,6 +2,8 @@ package com.example.plaintexteditor.ui.editor
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
@@ -37,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -47,6 +51,7 @@ import com.example.plaintexteditor.data.text.LineEnding
 import com.example.plaintexteditor.data.search.SearchMatch
 import com.example.plaintexteditor.data.search.SearchOptions
 import com.example.plaintexteditor.data.search.TextSearch
+import com.example.plaintexteditor.data.text.LineCounter
 import com.example.plaintexteditor.data.text.TextEncoding
 import com.example.plaintexteditor.data.text.TextFormat
 import com.example.plaintexteditor.data.text.TextFormats
@@ -66,6 +71,12 @@ private const val DRAFT_AUTO_SAVE_INTERVAL_MS = 10_000L
 
 /** 一次查找最多等多久（毫秒）；超过就放弃等待，避免正则把界面卡住 */
 private const val SEARCH_TIMEOUT_MS = 3_000L
+
+/** 当前行号多久算一次（毫秒） */
+private const val LINE_TICK_MS = 2_000L
+
+/** 行号显示多久后淡出（毫秒） */
+private const val LINE_BADGE_VISIBLE_MS = 1_000L
 
 /** 打开文件时发现有草稿，先记下来，等用户决定“恢复”还是“丢弃” */
 private data class DraftPrompt(val path: String, val content: String)
@@ -94,6 +105,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val workspaces by app.workspaceStore.workspaces.collectAsState(initial = emptyList())
+    val showCurrentLine by app.settingsStore.showCurrentLine.collectAsState(initial = true)
 
     // ---------------- 界面开关 ----------------
     var treeRefreshKey by remember { mutableStateOf(0) }
@@ -126,6 +138,12 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     var selectionRequest by remember { mutableStateOf<SelectionRequest?>(null) }
     var selectionToken by remember { mutableStateOf(0) }
     var confirmReplaceAll by remember { mutableStateOf(false) }
+
+    // ---------------- 行号状态 ----------------
+    var cursorOffset by remember { mutableStateOf(0) }
+    var totalLines by remember { mutableStateOf<Int?>(null) }
+    var currentLine by remember { mutableStateOf<Int?>(null) }
+    var lineBadgeVisible by remember { mutableStateOf(false) }
 
     val isModified = openFilePath != null && editorText != savedText
     val fileName = openFilePath?.substringAfterLast('/')
@@ -395,6 +413,44 @@ fun EditorScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    // 总行数：文件内容变化后（停顿 400 毫秒）在后台数一次
+    LaunchedEffect(openFilePath, editorText) {
+        if (openFilePath == null) {
+            totalLines = null
+            return@LaunchedEffect
+        }
+        delay(400)
+        totalLines = withContext(Dispatchers.Default) { LineCounter.countLines(editorText) }
+    }
+
+    // 当前行号：每 2 秒算一次（在后台线程算，不卡界面）
+    LaunchedEffect(showCurrentLine, openFilePath) {
+        if (!showCurrentLine || openFilePath == null) {
+            currentLine = null
+            lineBadgeVisible = false
+            return@LaunchedEffect
+        }
+        while (true) {
+            delay(LINE_TICK_MS)
+            val line = withContext(Dispatchers.Default) {
+                LineCounter.lineOfOffset(editorText, cursorOffset)
+            }
+            // 只有行号真的变了才更新 —— 光标没动就不会反复触发动画
+            if (line != currentLine) currentLine = line
+        }
+    }
+
+    // 行号变化后先显示 1 秒，再淡出消失
+    LaunchedEffect(currentLine) {
+        if (currentLine == null) {
+            lineBadgeVisible = false
+            return@LaunchedEffect
+        }
+        lineBadgeVisible = true
+        delay(LINE_BADGE_VISIBLE_MS)
+        lineBadgeVisible = false
+    }
+
     // ---------------- 文件浏览器 ----------------
     if (showFileBrowser) {
         BackHandler { showFileBrowser = false }
@@ -463,6 +519,10 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                     onFindClick = { showFindPanel = !showFindPanel },
                     onSwitchEncoding = { showEncodingSheet = true },
                     onSwitchLineEnding = { showLineEndingSheet = true },
+                    showCurrentLine = showCurrentLine,
+                    onToggleCurrentLine = {
+                        scope.launch { app.settingsStore.setShowCurrentLine(!showCurrentLine) }
+                    },
                 )
             },
             bottomBar = {
@@ -470,6 +530,9 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                     isModified = isModified,
                     encoding = textFormat.encoding.displayName,
                     lineEnding = textFormat.lineEnding.displayName,
+                    totalLines = totalLines,
+                    currentLine = currentLine,
+                    showCurrentLine = showCurrentLine,
                 )
             },
             snackbarHost = {
@@ -503,9 +566,39 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                             onTextChange = { editorText = it },
                             modifier = Modifier.fillMaxSize(),
                             selectionRequest = selectionRequest,
+                            onCursorOffsetChanged = { offset -> cursorOffset = offset },
                         )
 
                         else -> NoFileOpenedPlaceholder(modifier = Modifier.fillMaxSize())
+                    }
+
+                    // 当前行号的小角标：出现 1 秒后淡出（关掉开关就不显示）。
+                    // 用 alpha 动画而不是 AnimatedVisibility —— 更轻，也不用担心作用域问题
+                    val badgeVisible = lineBadgeVisible && showCurrentLine && openFilePath != null
+                    val badgeAlpha by animateFloatAsState(
+                        targetValue = if (badgeVisible) 1f else 0f,
+                        animationSpec = tween(durationMillis = 220),
+                        label = "lineBadge",
+                    )
+                    if (badgeAlpha > 0.01f) {
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(12.dp)
+                                .graphicsLayer { alpha = badgeAlpha },
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.inverseSurface,
+                            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    R.string.status_line_number_format,
+                                    currentLine ?: 0,
+                                ),
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            )
+                        }
                     }
                 }
 

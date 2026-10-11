@@ -2,6 +2,7 @@ package com.example.plaintexteditor.ui.editor
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
@@ -33,6 +34,8 @@ import com.example.plaintexteditor.R
  * @param canSave 保存按钮是否可以点（没打开文件、或没有改动时是灰的）
  * @param onSwitchEncoding 点“更多 → 切换编码…”时调用
  * @param onSwitchLineEnding 点“更多 → 切换换行符…”时调用
+ * @param showCurrentLine 是否显示当前行号（菜单里打勾）
+ * @param onToggleCurrentLine 点“显示当前行号”时调用
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +48,8 @@ fun EditorTopBar(
     onFindClick: () -> Unit,
     onSwitchEncoding: () -> Unit,
     onSwitchLineEnding: () -> Unit,
+    showCurrentLine: Boolean,
+    onToggleCurrentLine: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var moreMenuOpen by remember { mutableStateOf(false) }
@@ -104,6 +109,19 @@ fun EditorTopBar(
                             moreMenuOpen = false
                             onSwitchLineEnding()
                         },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.action_toggle_current_line)) },
+                        trailingIcon = {
+                            if (showCurrentLine) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                )
+                            }
+                        },
+                        // 故意不关菜单：勾选状态变了能立刻看到
+                        onClick = onToggleCurrentLine,
                     )
                 }
             }

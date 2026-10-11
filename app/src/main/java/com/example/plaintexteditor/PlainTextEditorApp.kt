@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.example.plaintexteditor.data.draft.DraftStore
 import com.example.plaintexteditor.data.repository.FileRepository
+import com.example.plaintexteditor.data.settings.SettingsStore
 import com.example.plaintexteditor.data.workspace.WorkspaceStore
 import java.io.File
 
@@ -32,6 +33,11 @@ class PlainTextEditorApp : Application() {
     /** 草稿存储：把“还没保存的内容”临时写进私有缓存目录的 drafts 子里 */
     val draftStore: DraftStore by lazy {
         DraftStore(draftDirectory = File(cacheDir, "drafts"))
+    }
+
+    /** 应用设置：当前行号开关、大文件阈值等 */
+    val settingsStore: SettingsStore by lazy {
+        SettingsStore(context = this)
     }
 
     companion object {

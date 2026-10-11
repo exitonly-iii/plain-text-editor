@@ -27,6 +27,9 @@ import com.example.plaintexteditor.R
  * @param isModified 当前文件是否有未保存的修改
  * @param encoding 当前编码的显示名，例如 "UTF-8"
  * @param lineEnding 当前换行符的显示名，例如 "LF"
+ * @param totalLines 总行数（还没算出来时传 null）
+ * @param currentLine 光标所在行（还没算出来时传 null）
+ * @param showCurrentLine 是否显示当前行号（设置里的开关）
  */
 @Composable
 fun EditorStatusBar(
@@ -34,6 +37,9 @@ fun EditorStatusBar(
     isModified: Boolean = false,
     encoding: String,
     lineEnding: String,
+    totalLines: Int? = null,
+    currentLine: Int? = null,
+    showCurrentLine: Boolean = true,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -63,9 +69,21 @@ fun EditorStatusBar(
             // 把后面的内容挤到右边
             Spacer(modifier = Modifier.weight(1f))
 
-            StatusBarLabel(text = stringResource(R.string.status_line_count))
+            StatusBarLabel(
+                text = totalLines?.let {
+                    stringResource(R.string.status_line_count_format, it)
+                } ?: stringResource(R.string.status_line_count),
+            )
             StatusBarSeparator()
-            StatusBarLabel(text = stringResource(R.string.status_cursor_position))
+            StatusBarLabel(
+                text = if (!showCurrentLine) {
+                    stringResource(R.string.status_line_number_hidden)
+                } else {
+                    currentLine?.let {
+                        stringResource(R.string.status_line_number_format, it)
+                    } ?: stringResource(R.string.status_line_number_placeholder)
+                },
+            )
         }
     }
 }

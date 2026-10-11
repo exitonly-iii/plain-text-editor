@@ -1,5 +1,6 @@
 package com.example.plaintexteditor.ui.editor
 
+import android.content.Context
 import android.graphics.Color as AndroidColor
 import android.graphics.Typeface
 import android.text.Editable
@@ -15,6 +16,20 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
+
+/**
+ * 只为了能在光标移动时通知外面；其它行为和普通 EditText 完全一样。
+ */
+private class CursorTrackingEditText(context: Context) : EditText(context) {
+
+    /** 光标（选区起点）变化时回调，参数是字符偏移量 */
+    var onCursorMoved: ((Int) -> Unit)? = null
+
+    override fun onSelectionChanged(selStart: Int, selEnd: Int) {
+        super.onSelectionChanged(selStart, selEnd)
+        onCursorMoved?.invoke(selectionStart)
+    }
+}
 
 /**
  * 一次“请把光标 / 选区放到这里”的请求。
@@ -37,6 +52,7 @@ data class SelectionRequest(
  * @param onTextChange 用户每打一个字都会回调一次，把最新文本交回上层
  * @param monospace 是否用等宽字体。默认 false = 用系统默认字体（本阶段的要求）
  * @param selectionRequest 一次性请求：把光标 / 选区放到指定位置（查找跳转、替换后定位用）
+ * @param onCursorOffsetChanged 光标移动时回调（传字符偏移量），用来算“当前在第几行”
  */
 @Composable
 fun PlainTextEditor(
@@ -45,9 +61,11 @@ fun PlainTextEditor(
     modifier: Modifier = Modifier,
     monospace: Boolean = false,
     selectionRequest: SelectionRequest? = null,
+    onCursorOffsetChanged: (Int) -> Unit = {},
 ) {
     // 始终拿到最新的回调函数，避免控件里存着旧的 lambda
     val currentOnTextChange by rememberUpdatedState(newValue = onTextChange)
+    val currentOnCursorMoved by rememberUpdatedState(newValue = onCursorOffsetChanged)
     val currentTextColor = MaterialTheme.colorScheme.onSurface.toArgb()
 
     AndroidView(
@@ -57,7 +75,9 @@ fun PlainTextEditor(
             val horizontalPadding = (16 * density).toInt()
             val verticalPadding = (12 * density).toInt()
 
-            EditText(context).apply {
+            CursorTrackingEditText(context).apply {
+                onCursorMoved = { offset -> currentOnCursorMoved(offset) }
+
                 // 去掉 EditText 自带的背景（那是一条下划线），让它铺满整个编辑区
                 setBackgroundColor(AndroidColor.TRANSPARENT)
                 gravity = Gravity.TOP or Gravity.START
