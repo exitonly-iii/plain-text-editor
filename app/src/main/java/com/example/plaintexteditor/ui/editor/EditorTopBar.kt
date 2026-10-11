@@ -36,7 +36,9 @@ import com.example.plaintexteditor.R
  * @param onSwitchLineEnding 点“更多 → 切换换行符…”时调用
  * @param showCurrentLine 是否显示当前行号（菜单里打勾）
  * @param onToggleCurrentLine 点“显示当前行号”时调用
- * @param onOpenLargeFileThreshold 点“大文件阈值…”时调用
+ * @param onOpenSettings 点“设置…”时调用
+ * @param canShare 当前是否有文件可以分享
+ * @param onShare 点“分享当前文件”时调用
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,7 +53,9 @@ fun EditorTopBar(
     onSwitchLineEnding: () -> Unit,
     showCurrentLine: Boolean,
     onToggleCurrentLine: () -> Unit,
-    onOpenLargeFileThreshold: () -> Unit,
+    onOpenSettings: () -> Unit,
+    canShare: Boolean,
+    onShare: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var moreMenuOpen by remember { mutableStateOf(false) }
@@ -126,10 +130,18 @@ fun EditorTopBar(
                         onClick = onToggleCurrentLine,
                     )
                     DropdownMenuItem(
-                        text = { Text(text = stringResource(R.string.action_large_file_threshold)) },
+                        text = { Text(text = stringResource(R.string.action_share)) },
+                        enabled = canShare,
                         onClick = {
                             moreMenuOpen = false
-                            onOpenLargeFileThreshold()
+                            onShare()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.settings_title) + "…") },
+                        onClick = {
+                            moreMenuOpen = false
+                            onOpenSettings()
                         },
                     )
                 }

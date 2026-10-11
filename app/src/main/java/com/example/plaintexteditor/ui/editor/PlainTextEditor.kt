@@ -53,6 +53,7 @@ data class SelectionRequest(
  * @param monospace 是否用等宽字体。默认 false = 用系统默认字体（本阶段的要求）
  * @param selectionRequest 一次性请求：把光标 / 选区放到指定位置（查找跳转、替换后定位用）
  * @param onCursorOffsetChanged 光标移动时回调（传字符偏移量），用来算“当前在第几行”
+ * @param fontSizeSp 字号（sp），来自设置页
  */
 @Composable
 fun PlainTextEditor(
@@ -62,6 +63,7 @@ fun PlainTextEditor(
     monospace: Boolean = false,
     selectionRequest: SelectionRequest? = null,
     onCursorOffsetChanged: (Int) -> Unit = {},
+    fontSizeSp: Float = 16f,
 ) {
     // 始终拿到最新的回调函数，避免控件里存着旧的 lambda
     val currentOnTextChange by rememberUpdatedState(newValue = onTextChange)
@@ -94,7 +96,7 @@ fun PlainTextEditor(
 
                 // 字体：默认用系统默认字体；想要等宽字体（看代码更整齐）就传 monospace = true
                 typeface = if (monospace) Typeface.MONOSPACE else Typeface.DEFAULT
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSizeSp)
                 setLineSpacing(0f, 1.2f)
                 setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
                 setTextColor(currentTextColor)
@@ -124,6 +126,16 @@ fun PlainTextEditor(
             // 主题换了颜色也要跟着换
             if (editText.currentTextColor != currentTextColor) {
                 editText.setTextColor(currentTextColor)
+            }
+
+            // 字号变了也要跟着换（换算成像素比较，避免每次重组都重排文字）
+            val expectedPx = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_SP,
+                fontSizeSp,
+                editText.resources.displayMetrics,
+            )
+            if (kotlin.math.abs(editText.textSize - expectedPx) > 0.5f) {
+                editText.setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSizeSp)
             }
 
             // 只有“外部文本”和“控件里的文本”不一致时才回写内容。

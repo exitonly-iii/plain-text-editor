@@ -137,4 +137,36 @@
     <string name="large_file_loading">正在为大文件建立索引…</string>
     <string name="message_encoding_switch_disabled">只读模式下暂不支持切换编码</string>
     <string name="message_jump_to_match">已跳到第 %1$d 行：%2$s</string>
+
+    <!-- 设置页 / 导入导出（第十阶段） -->
+    <string name="settings_title">设置</string>
+    <string name="settings_section_appearance">外观</string>
+    <string name="settings_section_editor">编辑器</string>
+    <string name="settings_section_files">文件</string>
+    <string name="settings_section_about">关于</string>
+    <string name="settings_theme">主题</string>
+    <string name="settings_font_size">字体大小</string>
+    <string name="settings_show_current_line">显示当前行号</string>
+    <string name="settings_draft_interval">草稿自动保存间隔</string>
+    <string name="settings_large_file_threshold">大文件阈值</string>
+    <string name="settings_default_encoding">默认编码</string>
+    <string name="settings_default_line_ending">默认换行符</string>
+    <string name="settings_version">版本</string>
+    <string name="settings_licenses">开源许可</string>
+    <string name="theme_follow_system">跟随系统</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="settings_value_seconds">%1$d 秒</string>
+    <string name="settings_value_sp">%1$d sp</string>
+    <string name="theme_value_hint">切换后立即生效</string>
+    <string name="licenses_text">本项目使用以下开源库：\n\n• Jetpack Compose 与 Material 3（Apache License 2.0）\n• AndroidX Core / Activity / Lifecycle（Apache License 2.0）\n• DataStore（Apache License 2.0）\n• Kotlin 标准库与协程（Apache License 2.0）\n\n本项目自身以 MIT 许可证开源，详见仓库根目录的 LICENSE 文件。</string>
+    <string name="settings_default_hint">新建或空文件使用这两个默认值，现有文件仍按自身格式打开</string>
+    <string name="action_import">导入外部文件</string>
+    <string name="action_export">导出到…</string>
+    <string name="action_share">分享</string>
+    <string name="message_import_done">已导入：%1$s</string>
+    <string name="message_import_failed">导入失败：无法读取这个文件</string>
+    <string name="message_export_done">已导出</string>
+    <string name="message_export_failed">导出失败：无法写入所选位置</string>
+    <string name="message_share_failed">分享失败：没有可用的应用</string>
 </resources>

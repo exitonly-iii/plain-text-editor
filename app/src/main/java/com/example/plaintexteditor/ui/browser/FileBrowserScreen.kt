@@ -1,6 +1,8 @@
 package com.example.plaintexteditor.ui.browser
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +47,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,8 +60,14 @@ import com.example.plaintexteditor.data.repository.FileRepository
 import com.example.plaintexteditor.data.workspace.WorkspaceStore
 import com.example.plaintexteditor.ui.common.ConfirmDeleteDialog
 import com.example.plaintexteditor.ui.common.NameInputDialog
+import com.example.plaintexteditor.ui.common.displayNameOf
+import com.example.plaintexteditor.ui.common.readUriBytes
+import com.example.plaintexteditor.ui.common.sharePrivateFile
+import com.example.plaintexteditor.ui.common.writeUriBytes
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** 正在输入名字的三种情况 */
 private enum class NameDialogKind { NEW_FOLDER, NEW_FILE, RENAME }
@@ -96,6 +106,7 @@ fun FileBrowserScreen(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
     val rootName = stringResource(R.string.browser_title)
@@ -108,6 +119,11 @@ fun FileBrowserScreen(
     val msgAlreadyInWorkspace = stringResource(R.string.message_already_in_workspace)
     val msgUnknownError = stringResource(R.string.error_unknown)
     val failureFormat = stringResource(R.string.message_operation_failed)
+    val msgImportFailed = stringResource(R.string.message_import_failed)
+    val msgImportDoneFormat = stringResource(R.string.message_import_done)
+    val msgExportDone = stringResource(R.string.message_export_done)
+    val msgExportFailed = stringResource(R.string.message_export_failed)
+    val msgShareFailed = stringResource(R.string.message_share_failed)
 
     fun failureText(detail: String?): String =
         String.format(Locale.getDefault(), failureFormat, detail ?: msgUnknownError)
@@ -124,6 +140,7 @@ fun FileBrowserScreen(
     var actionTarget by remember { mutableStateOf<FileItem?>(null) }
     var pendingDelete by remember { mutableStateOf<FileItem?>(null) }
     var pickerState by remember { mutableStateOf<PickerState?>(null) }
+    var exportTarget by remember { mutableStateOf<FileItem?>(null) }
 
     fun reload() {
         reloadKey++
@@ -228,6 +245,75 @@ fun FileBrowserScreen(
     }
 
     // ---------- 界面 ----------
+    // ---------- 导入 / 导出 / 分享 ----------
+
+    /** 从系统文件选择器选中的外部文件：读出字节，原样复制进私有目录 */
+    fun importExternalFile(uri: android.net.Uri) {
+        scope.launch {
+            val name = displayNameOf(context, uri)
+            val bytes = withContext(Dispatchers.IO) { readUriBytes(context, uri) }
+            if (bytes == null) {
+                toast(msgImportFailed)
+                return@launch
+            }
+            val path = repository.uniquePath(currentPath, name).getOrNull()
+            if (path == null) {
+                toast(msgImportFailed)
+                return@launch
+            }
+            repository.writeBinaryFile(path, bytes).fold(
+                onSuccess = {
+                    reload()
+                    toast(
+                        String.format(
+                            Locale.getDefault(),
+                            msgImportDoneFormat,
+                            path.substringAfterLast('/'),
+                        ),
+                    )
+                },
+                onFailure = { toast(failureText(it.message)) },
+            )
+        }
+    }
+
+    /** 导出到用户选中的位置（public 目录也行，靠系统授权，不需要权限） */
+    fun exportTo(uri: android.net.Uri, item: FileItem) {
+        scope.launch {
+            val bytes = repository.readBinaryFile(item.path).getOrNull()
+            if (bytes == null) {
+                toast(msgExportFailed)
+                return@launch
+            }
+            val ok = withContext(Dispatchers.IO) { writeUriBytes(context, uri, bytes) }
+            toast(if (ok) msgExportDone else msgExportFailed)
+        }
+    }
+
+    /** 分享：交给系统分享面板 */
+    fun shareItem(item: FileItem) {
+        val ok = sharePrivateFile(
+            context = context,
+            rootAbsolutePath = repository.rootAbsolutePath,
+            relativePath = item.path,
+        )
+        if (!ok) toast(msgShareFailed)
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) importExternalFile(uri)
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri ->
+        val target = exportTarget
+        exportTarget = null
+        if (uri != null && target != null) exportTo(uri, target)
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -242,6 +328,12 @@ fun FileBrowserScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { importLauncher.launch(arrayOf("*/*")) }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_import),
+                            contentDescription = stringResource(R.string.action_import),
+                        )
+                    }
                     IconButton(onClick = { showNewSheet = true }) {
                         Icon(
                             imageVector = Icons.Filled.Add,
@@ -369,6 +461,15 @@ fun FileBrowserScreen(
             onAddToWorkspace = {
                 actionTarget = null
                 addToWorkspace(item)
+            },
+            onShare = {
+                actionTarget = null
+                shareItem(item)
+            },
+            onExport = {
+                actionTarget = null
+                exportTarget = item
+                exportLauncher.launch(item.name)
             },
             onRename = {
                 actionTarget = null

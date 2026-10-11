@@ -235,6 +235,28 @@ class FileRepository(
         if (file.isDirectory) 0L else file.length()
     }
 
+    /** 读原始字节（导出 / 分享时用，不做任何编码转换） */
+    suspend fun readBinaryFile(path: String): Result<ByteArray> = io {
+        val file = resolveExisting(path)
+        if (file.isDirectory) throw IOException("这是文件夹，不是文件：${display(path)}")
+        file.readBytes()
+    }
+
+    /** 写原始字节（导入外部文件时用，原样保存，不转码） */
+    suspend fun writeBinaryFile(path: String, bytes: ByteArray): Result<Unit> = io {
+        requireNotRoot(path)
+        val file = resolve(path)
+        if (file.isDirectory) throw IOException("这是文件夹，不能写文件进去：${display(path)}")
+        file.parentFile?.mkdirs()
+        file.writeBytes(bytes)
+    }
+
+    /** 在 parentPath 目录里找一个不会重名的路径（例如导入时原文件名已存在） */
+    suspend fun uniquePath(parentPath: String, name: String): Result<String> = io {
+        val parent = resolveDirectory(parentPath)
+        relativePathOf(uniqueFile(parent, checkName(name), isDirectory = false))
+    }
+
     /**
      * 给大文件建“分块索引”（只读模式用）：只记每个块的字节位置，不把内容读进内存。
      * 要扫一遍文件，会慢一些，注意在后台线程调用。

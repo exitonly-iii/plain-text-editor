@@ -61,6 +61,8 @@ import com.example.plaintexteditor.data.text.TextFormat
 import com.example.plaintexteditor.data.text.TextFormats
 import com.example.plaintexteditor.ui.browser.FileBrowserScreen
 import com.example.plaintexteditor.ui.common.ActionSheetRow
+import com.example.plaintexteditor.ui.common.sharePrivateFile
+import com.example.plaintexteditor.ui.settings.SettingsScreen
 import com.example.plaintexteditor.ui.theme.PlainTextEditorTheme
 import com.example.plaintexteditor.ui.theme.ThemeMode
 import java.util.Locale
@@ -69,9 +71,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-
-/** 编辑中每隔多久把内容写一份草稿（不碰原文件） */
-private const val DRAFT_AUTO_SAVE_INTERVAL_MS = 10_000L
 
 /** 一次查找最多等多久（毫秒）；超过就放弃等待，避免正则把界面卡住 */
 private const val SEARCH_TIMEOUT_MS = 3_000L
@@ -113,10 +112,15 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     val snackbarHostState = remember { SnackbarHostState() }
     val workspaces by app.workspaceStore.workspaces.collectAsState(initial = emptyList())
     val showCurrentLine by app.settingsStore.showCurrentLine.collectAsState(initial = true)
+    val fontSizeSp by app.settingsStore.fontSizeSp.collectAsState(initial = 16)
+    val draftIntervalSeconds by app.settingsStore.draftIntervalSeconds.collectAsState(initial = 10)
+    val defaultEncodingName by app.settingsStore.defaultEncodingName.collectAsState(initial = "UTF-8")
+    val defaultLineEndingName by app.settingsStore.defaultLineEndingName.collectAsState(initial = "LF")
 
     // ---------------- 界面开关 ----------------
     var treeRefreshKey by remember { mutableStateOf(0) }
     var showFileBrowser by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     var showEncodingSheet by remember { mutableStateOf(false) }
     var showLineEndingSheet by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
@@ -155,7 +159,6 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     // ---------------- 大文件只读状态 ----------------
     var largeFileIndex by remember { mutableStateOf<LargeFileIndex?>(null) }
     var largeMatches by remember { mutableStateOf(emptyList<LargeMatch>()) }
-    var showThresholdSheet by remember { mutableStateOf(false) }
     val largeListState = rememberLazyListState()
     val thresholdMb by app.settingsStore.largeFileThresholdMb.collectAsState(
         initial = 5,
@@ -180,6 +183,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     val msgJumpToMatch = stringResource(R.string.message_jump_to_match)
     val largeNoticeFormat = stringResource(R.string.large_file_readonly_notice)
     val msgEncodingSwitchDisabled = stringResource(R.string.message_encoding_switch_disabled)
+    val msgShareFailed = stringResource(R.string.message_share_failed)
 
     fun failureText(detail: String?): String =
         String.format(Locale.getDefault(), failureFormat, detail ?: unknownError)
@@ -225,12 +229,25 @@ fun EditorScreen(modifier: Modifier = Modifier) {
         // 普通文件：读完就回到正常（可编辑）模式
         largeFileIndex = null
         largeMatches = emptyList()
+        val defaultFormat = TextFormat(
+            encoding = TextEncoding.values()
+                .firstOrNull { it.charsetName == defaultEncodingName } ?: TextEncoding.UTF_8,
+            hasBom = false,
+            lineEnding = if (defaultLineEndingName == "CRLF") LineEnding.CRLF else LineEnding.LF,
+        )
         app.fileRepository.readTextFile(path, overrideEncoding).fold(
             onSuccess = { content ->
                 openFilePath = path
-                editorText = content.text
-                savedText = content.text
-                textFormat = content.format
+                // 空文件用“设置里的默认编码 / 默认换行符”，非空文件保持它自己的格式
+                if (content.text.isEmpty() && overrideEncoding == null) {
+                    editorText = ""
+                    savedText = ""
+                    textFormat = defaultFormat
+                } else {
+                    editorText = content.text
+                    savedText = content.text
+                    textFormat = content.format
+                }
                 if (checkDraft) {
                     val draft = app.draftStore.read(path).getOrNull()
                     if (!draft.isNullOrEmpty() && draft != content.text) {
@@ -327,10 +344,10 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     }
 
     // 编辑中每隔一段时间写一份草稿，这样即使应用被杀掉也不会丢内容
-    LaunchedEffect(openFilePath, isModified) {
+    LaunchedEffect(openFilePath, isModified, draftIntervalSeconds) {
         if (openFilePath == null || !isModified) return@LaunchedEffect
         while (true) {
-            delay(DRAFT_AUTO_SAVE_INTERVAL_MS)
+            delay(draftIntervalSeconds * 1000L)
             val path = openFilePath ?: break
             if (editorText == savedText) break
             app.draftStore.save(path, editorText)
@@ -578,6 +595,16 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     }
 
     // ---------------- 文件浏览器 ----------------
+    if (showSettings) {
+        BackHandler { showSettings = false }
+        SettingsScreen(
+            settingsStore = app.settingsStore,
+            onClose = { showSettings = false },
+            modifier = modifier,
+        )
+        return
+    }
+
     if (showFileBrowser) {
         BackHandler { showFileBrowser = false }
         FileBrowserScreen(
@@ -620,7 +647,8 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                     showFileBrowser = true
                 },
                 onOpenSettingsClick = {
-                    // TODO(后续阶段)：打开设置页
+                    scope.launch { drawerState.close() }
+                    showSettings = true
                 },
                 onFileClick = { item ->
                     scope.launch { drawerState.close() }
@@ -649,7 +677,19 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                     onToggleCurrentLine = {
                         scope.launch { app.settingsStore.setShowCurrentLine(!showCurrentLine) }
                     },
-                    onOpenLargeFileThreshold = { showThresholdSheet = true },
+                    onOpenSettings = { showSettings = true },
+                    canShare = openFilePath != null && !isLargeMode,
+                    onShare = {
+                        val path = openFilePath
+                        if (path != null) {
+                            val ok = sharePrivateFile(
+                                context = context,
+                                rootAbsolutePath = app.fileRepository.rootAbsolutePath,
+                                relativePath = path,
+                            )
+                            if (!ok) showMessage(msgShareFailed)
+                        }
+                    },
                 )
             },
             bottomBar = {
@@ -707,6 +747,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                             modifier = Modifier.fillMaxSize(),
                             selectionRequest = selectionRequest,
                             onCursorOffsetChanged = { offset -> cursorOffset = offset },
+                            fontSizeSp = fontSizeSp.toFloat(),
                         )
 
                         else -> NoFileOpenedPlaceholder(modifier = Modifier.fillMaxSize())
@@ -825,43 +866,6 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                         onClick = {
                             showLineEndingSheet = false
                             switchLineEnding(lineEnding)
-                        },
-                    )
-                }
-            }
-        }
-    }
-
-    // ---------------- 大文件阈值 ----------------
-    if (showThresholdSheet) {
-        ModalBottomSheet(onDismissRequest = { showThresholdSheet = false }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 24.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.sheet_title_large_file_threshold),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 4.dp),
-                )
-                Text(
-                    text = stringResource(R.string.sheet_large_file_threshold_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
-                )
-                HorizontalDivider()
-                listOf(1, 2, 5, 10, 20, 50).forEach { megabytes ->
-                    val label = stringResource(R.string.large_file_threshold_option, megabytes) +
-                        if (megabytes == thresholdMb) currentSuffix else ""
-                    ActionSheetRow(
-                        text = label,
-                        onClick = {
-                            showThresholdSheet = false
-                            scope.launch {
-                                app.settingsStore.setLargeFileThresholdMb(megabytes)
-                            }
                         },
                     )
                 }

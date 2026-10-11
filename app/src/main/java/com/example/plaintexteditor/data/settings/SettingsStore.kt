@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -38,6 +39,31 @@ class SettingsStore(
         prefs[KEY_LARGE_FILE_MB] ?: DEFAULT_LARGE_FILE_MB
     }
 
+    /** 主题：FOLLOW_SYSTEM / LIGHT / DARK（界面负责翻译成 ThemeMode） */
+    val themeModeName: Flow<String> = context.settingsDataStore.data.map { prefs ->
+        prefs[KEY_THEME] ?: THEME_FOLLOW_SYSTEM
+    }
+
+    /** 编辑区字号（sp） */
+    val fontSizeSp: Flow<Int> = context.settingsDataStore.data.map { prefs ->
+        prefs[KEY_FONT_SIZE] ?: DEFAULT_FONT_SIZE_SP
+    }
+
+    /** 草稿自动保存间隔（秒） */
+    val draftIntervalSeconds: Flow<Int> = context.settingsDataStore.data.map { prefs ->
+        prefs[KEY_DRAFT_INTERVAL] ?: DEFAULT_DRAFT_INTERVAL_SECONDS
+    }
+
+    /** 默认编码（新建/空文件用；按 charsetName 存，例如 "UTF-8"） */
+    val defaultEncodingName: Flow<String> = context.settingsDataStore.data.map { prefs ->
+        prefs[KEY_DEFAULT_ENCODING] ?: "UTF-8"
+    }
+
+    /** 默认换行符：LF / CRLF */
+    val defaultLineEndingName: Flow<String> = context.settingsDataStore.data.map { prefs ->
+        prefs[KEY_DEFAULT_LINE_ENDING] ?: "LF"
+    }
+
     suspend fun setShowCurrentLine(enabled: Boolean): Result<Unit> = io {
         context.settingsDataStore.edit { prefs -> prefs[KEY_SHOW_CURRENT_LINE] = enabled }
         Unit
@@ -46,6 +72,38 @@ class SettingsStore(
     suspend fun setLargeFileThresholdMb(megabytes: Int): Result<Unit> = io {
         val safe = megabytes.coerceIn(MIN_LARGE_FILE_MB, MAX_LARGE_FILE_MB)
         context.settingsDataStore.edit { prefs -> prefs[KEY_LARGE_FILE_MB] = safe }
+        Unit
+    }
+
+    suspend fun setThemeModeName(name: String): Result<Unit> = io {
+        val safe = when (name) {
+            THEME_LIGHT, THEME_DARK -> name
+            else -> THEME_FOLLOW_SYSTEM
+        }
+        context.settingsDataStore.edit { prefs -> prefs[KEY_THEME] = safe }
+        Unit
+    }
+
+    suspend fun setFontSizeSp(sizeSp: Int): Result<Unit> = io {
+        val safe = sizeSp.coerceIn(MIN_FONT_SIZE_SP, MAX_FONT_SIZE_SP)
+        context.settingsDataStore.edit { prefs -> prefs[KEY_FONT_SIZE] = safe }
+        Unit
+    }
+
+    suspend fun setDraftIntervalSeconds(seconds: Int): Result<Unit> = io {
+        val safe = seconds.coerceIn(MIN_DRAFT_INTERVAL_SECONDS, MAX_DRAFT_INTERVAL_SECONDS)
+        context.settingsDataStore.edit { prefs -> prefs[KEY_DRAFT_INTERVAL] = safe }
+        Unit
+    }
+
+    suspend fun setDefaultEncodingName(name: String): Result<Unit> = io {
+        context.settingsDataStore.edit { prefs -> prefs[KEY_DEFAULT_ENCODING] = name }
+        Unit
+    }
+
+    suspend fun setDefaultLineEndingName(name: String): Result<Unit> = io {
+        val safe = if (name == "CRLF") "CRLF" else "LF"
+        context.settingsDataStore.edit { prefs -> prefs[KEY_DEFAULT_LINE_ENDING] = safe }
         Unit
     }
 
@@ -64,7 +122,24 @@ class SettingsStore(
         const val MIN_LARGE_FILE_MB = 1
         const val MAX_LARGE_FILE_MB = 200
 
+        const val THEME_FOLLOW_SYSTEM = "FOLLOW_SYSTEM"
+        const val THEME_LIGHT = "LIGHT"
+        const val THEME_DARK = "DARK"
+
+        const val DEFAULT_FONT_SIZE_SP = 16
+        const val MIN_FONT_SIZE_SP = 12
+        const val MAX_FONT_SIZE_SP = 28
+
+        const val DEFAULT_DRAFT_INTERVAL_SECONDS = 10
+        const val MIN_DRAFT_INTERVAL_SECONDS = 2
+        const val MAX_DRAFT_INTERVAL_SECONDS = 120
+
         private val KEY_SHOW_CURRENT_LINE = booleanPreferencesKey("show_current_line")
         private val KEY_LARGE_FILE_MB = intPreferencesKey("large_file_threshold_mb")
+        private val KEY_THEME = stringPreferencesKey("theme_mode")
+        private val KEY_FONT_SIZE = intPreferencesKey("font_size_sp")
+        private val KEY_DRAFT_INTERVAL = intPreferencesKey("draft_interval_seconds")
+        private val KEY_DEFAULT_ENCODING = stringPreferencesKey("default_encoding")
+        private val KEY_DEFAULT_LINE_ENDING = stringPreferencesKey("default_line_ending")
     }
 }

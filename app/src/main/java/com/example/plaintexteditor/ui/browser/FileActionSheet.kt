@@ -42,6 +42,8 @@ fun FileActionSheet(
     item: FileItem,
     onDismiss: () -> Unit,
     onAddToWorkspace: () -> Unit,
+    onShare: () -> Unit,
+    onExport: () -> Unit,
     onRename: () -> Unit,
     onCopy: () -> Unit,
     onMove: () -> Unit,
@@ -65,6 +67,10 @@ fun FileActionSheet(
                 text = stringResource(R.string.action_add_to_workspace),
                 onClick = onAddToWorkspace,
             )
+            if (item.isFile) {
+                ActionSheetRow(text = stringResource(R.string.action_share), onClick = onShare)
+                ActionSheetRow(text = stringResource(R.string.action_export), onClick = onExport)
+            }
             ActionSheetRow(text = stringResource(R.string.action_rename), onClick = onRename)
             ActionSheetRow(text = stringResource(R.string.action_copy), onClick = onCopy)
             ActionSheetRow(text = stringResource(R.string.action_move), onClick = onMove)

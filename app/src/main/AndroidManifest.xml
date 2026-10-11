@@ -32,6 +32,17 @@
             </intent-filter>
         </activity>
 
+        <!-- FileProvider：把私有目录里的文件安全地分享给别的应用（不需要任何权限） -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
     </application>
 
 </manifest>
