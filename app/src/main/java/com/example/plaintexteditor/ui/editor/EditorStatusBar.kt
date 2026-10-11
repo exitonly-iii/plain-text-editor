@@ -15,16 +15,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.plaintexteditor.R
 
 /**
  * 底部状态栏。
- * 左边显示编码和换行符，右边显示行数和行号 —— 第一阶段全部是占位文字。
+ * 左边显示“已修改”（有未保存修改时）+ 编码和换行符，右边显示行数和行号占位。
+ *
+ * @param isModified 当前文件是否有未保存的修改
  */
 @Composable
-fun EditorStatusBar(modifier: Modifier = Modifier) {
+fun EditorStatusBar(
+    modifier: Modifier = Modifier,
+    isModified: Boolean = false,
+) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -39,6 +45,13 @@ fun EditorStatusBar(modifier: Modifier = Modifier) {
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (isModified) {
+                StatusBarLabel(
+                    text = stringResource(R.string.status_modified),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                StatusBarSeparator()
+            }
             StatusBarLabel(text = stringResource(R.string.status_encoding))
             StatusBarSeparator()
             StatusBarLabel(text = stringResource(R.string.status_line_ending))
@@ -54,10 +67,15 @@ fun EditorStatusBar(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun StatusBarLabel(text: String, modifier: Modifier = Modifier) {
+private fun StatusBarLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
+        color = color,
         maxLines = 1,
         modifier = modifier,
     )

@@ -92,6 +92,7 @@ fun FileBrowserScreen(
     repository: FileRepository,
     workspaceStore: WorkspaceStore,
     onClose: () -> Unit,
+    onFileClick: (FileItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -315,8 +316,10 @@ fun FileBrowserScreen(
                             onClick = {
                                 if (item.isDirectory) {
                                     currentPath = item.path
+                                } else {
+                                    // 点文件 = 交给编辑区打开（页面由外面负责关掉）
+                                    onFileClick(item)
                                 }
-                                // 本阶段不做“打开文件”，点文件暂时没有反应
                             },
                             onLongClick = { actionTarget = item },
                             onMenuClick = { actionTarget = item },

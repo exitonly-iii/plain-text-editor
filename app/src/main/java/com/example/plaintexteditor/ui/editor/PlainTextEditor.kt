@@ -25,12 +25,14 @@ import androidx.compose.ui.viewinterop.AndroidView
  *
  * @param text 当前文本（由上层保存，控件只负责显示和回调）
  * @param onTextChange 用户每打一个字都会回调一次，把最新文本交回上层
+ * @param monospace 是否用等宽字体。默认 false = 用系统默认字体（本阶段的要求）
  */
 @Composable
 fun PlainTextEditor(
     text: String,
     onTextChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    monospace: Boolean = false,
 ) {
     // 始终拿到最新的回调函数，避免控件里存着旧的 lambda
     val currentOnTextChange by rememberUpdatedState(newValue = onTextChange)
@@ -58,8 +60,8 @@ fun PlainTextEditor(
                 setHorizontallyScrolling(false)
                 setVerticalScrollBarEnabled(true)
 
-                // 等宽字体，代码/纯文本对齐更整齐
-                typeface = Typeface.MONOSPACE
+                // 字体：默认用系统默认字体；想要等宽字体（看代码更整齐）就传 monospace = true
+                typeface = if (monospace) Typeface.MONOSPACE else Typeface.DEFAULT
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                 setLineSpacing(0f, 1.2f)
                 setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
@@ -93,10 +95,11 @@ fun PlainTextEditor(
             }
 
             // 只有“外部文本”和“控件里的文本”不一致时才回写内容。
-            // 否则用户每打一个字，光标都会被重置到末尾。
+            // 否则用户每打一个字，光标都会被重置。
+            // 打开新文件时把光标放到开头。
             if (editText.text.toString() != text) {
                 editText.setText(text)
-                editText.setSelection(editText.text.length)
+                editText.setSelection(0)
             }
         },
     )
