@@ -36,6 +36,7 @@ import com.example.plaintexteditor.R
  * @param onSwitchLineEnding 点“更多 → 切换换行符…”时调用
  * @param showCurrentLine 是否显示当前行号（菜单里打勾）
  * @param onToggleCurrentLine 点“显示当前行号”时调用
+ * @param onOpenLargeFileThreshold 点“大文件阈值…”时调用
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,6 +51,7 @@ fun EditorTopBar(
     onSwitchLineEnding: () -> Unit,
     showCurrentLine: Boolean,
     onToggleCurrentLine: () -> Unit,
+    onOpenLargeFileThreshold: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var moreMenuOpen by remember { mutableStateOf(false) }
@@ -122,6 +124,13 @@ fun EditorTopBar(
                         },
                         // 故意不关菜单：勾选状态变了能立刻看到
                         onClick = onToggleCurrentLine,
+                    )
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.action_large_file_threshold)) },
+                        onClick = {
+                            moreMenuOpen = false
+                            onOpenLargeFileThreshold()
+                        },
                     )
                 }
             }

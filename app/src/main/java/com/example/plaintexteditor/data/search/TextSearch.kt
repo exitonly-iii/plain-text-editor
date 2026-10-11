@@ -101,6 +101,14 @@ object TextSearch {
         return FindResult(matches = matches)
     }
 
+    /** 只检查条件本身合不合法（主要是正则语法）；没问题返回 null */
+    fun validate(options: SearchOptions): String? = try {
+        buildPattern(options)
+        null
+    } catch (syntax: PatternSyntaxException) {
+        syntax.description ?: syntax.message
+    }
+
     /** 替换第 matchIndex 处匹配（从 0 开始数） */
     fun replaceMatch(text: String, matchIndex: Int, options: SearchOptions): ReplaceOneResult {
         val pattern = try {

@@ -1,6 +1,7 @@
 package com.example.plaintexteditor.data.repository
 
 import com.example.plaintexteditor.data.model.FileItem
+import com.example.plaintexteditor.data.text.LargeFileIndex
 import com.example.plaintexteditor.data.text.TextContent
 import com.example.plaintexteditor.data.text.TextEncoding
 import com.example.plaintexteditor.data.text.TextFormat
@@ -226,6 +227,22 @@ class FileRepository(
         if (file.isDirectory) throw IOException("这是文件夹，不能写文字进去：${display(path)}")
         file.parentFile?.mkdirs()
         file.writeBytes(TextFormats.encode(content, format))
+    }
+
+    /** 文件大小（字节）；文件夹返回 0 */
+    suspend fun fileSize(path: String): Result<Long> = io {
+        val file = resolveExisting(path)
+        if (file.isDirectory) 0L else file.length()
+    }
+
+    /**
+     * 给大文件建“分块索引”（只读模式用）：只记每个块的字节位置，不把内容读进内存。
+     * 要扫一遍文件，会慢一些，注意在后台线程调用。
+     */
+    suspend fun buildLargeFileIndex(path: String): Result<LargeFileIndex> = io {
+        val file = resolveExisting(path)
+        if (file.isDirectory) throw IOException("这是文件夹，不是文件：${display(path)}")
+        LargeFileIndex.build(file)
     }
 
     // ======================================================================

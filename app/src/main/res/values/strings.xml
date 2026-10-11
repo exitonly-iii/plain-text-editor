@@ -126,4 +126,15 @@
     <string name="status_line_number_placeholder">行 --</string>
     <string name="status_line_number_hidden">行号已关</string>
     <string name="action_toggle_current_line">显示当前行号</string>
+
+    <!-- 大文件只读（第九阶段） -->
+    <string name="status_read_only">只读</string>
+    <string name="action_large_file_threshold">大文件阈值…</string>
+    <string name="sheet_title_large_file_threshold">超过多大算“大文件”</string>
+    <string name="sheet_large_file_threshold_hint">超过这个大小的文件会以只读方式打开，防止手机卡顿</string>
+    <string name="large_file_threshold_option">%1$d MB</string>
+    <string name="large_file_readonly_notice">文件较大（约 %1$s MB），已进入只读模式：可以滚动、选择、复制和查找，但不能修改。如需编辑，建议在电脑上处理，或先复制出一个小文件。</string>
+    <string name="large_file_loading">正在为大文件建立索引…</string>
+    <string name="message_encoding_switch_disabled">只读模式下暂不支持切换编码</string>
+    <string name="message_jump_to_match">已跳到第 %1$d 行：%2$s</string>
 </resources>

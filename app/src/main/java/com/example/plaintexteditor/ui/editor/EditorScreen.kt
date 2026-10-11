@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
@@ -48,6 +49,9 @@ import androidx.compose.ui.unit.dp
 import com.example.plaintexteditor.PlainTextEditorApp
 import com.example.plaintexteditor.R
 import com.example.plaintexteditor.data.text.LineEnding
+import com.example.plaintexteditor.data.search.LargeFileSearch
+import com.example.plaintexteditor.data.search.LargeMatch
+import com.example.plaintexteditor.data.text.LargeFileIndex
 import com.example.plaintexteditor.data.search.SearchMatch
 import com.example.plaintexteditor.data.search.SearchOptions
 import com.example.plaintexteditor.data.search.TextSearch
@@ -77,6 +81,9 @@ private const val LINE_TICK_MS = 2_000L
 
 /** 行号显示多久后淡出（毫秒） */
 private const val LINE_BADGE_VISIBLE_MS = 1_000L
+
+/** 大文件里流式查找最多等多久（毫秒） */
+private const val LARGE_SEARCH_TIMEOUT_MS = 15_000L
 
 /** 打开文件时发现有草稿，先记下来，等用户决定“恢复”还是“丢弃” */
 private data class DraftPrompt(val path: String, val content: String)
@@ -145,6 +152,16 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     var currentLine by remember { mutableStateOf<Int?>(null) }
     var lineBadgeVisible by remember { mutableStateOf(false) }
 
+    // ---------------- 大文件只读状态 ----------------
+    var largeFileIndex by remember { mutableStateOf<LargeFileIndex?>(null) }
+    var largeMatches by remember { mutableStateOf(emptyList<LargeMatch>()) }
+    var showThresholdSheet by remember { mutableStateOf(false) }
+    val largeListState = rememberLazyListState()
+    val thresholdMb by app.settingsStore.largeFileThresholdMb.collectAsState(
+        initial = 5,
+    )
+    val isLargeMode = largeFileIndex != null
+
     val isModified = openFilePath != null && editorText != savedText
     val fileName = openFilePath?.substringAfterLast('/')
 
@@ -160,6 +177,9 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     val findInvalidRegexFormat = stringResource(R.string.find_invalid_regex)
     val msgReplacedCount = stringResource(R.string.message_replaced_count)
     val msgReplaceFailed = stringResource(R.string.message_replace_failed)
+    val msgJumpToMatch = stringResource(R.string.message_jump_to_match)
+    val largeNoticeFormat = stringResource(R.string.large_file_readonly_notice)
+    val msgEncodingSwitchDisabled = stringResource(R.string.message_encoding_switch_disabled)
 
     fun failureText(detail: String?): String =
         String.format(Locale.getDefault(), failureFormat, detail ?: unknownError)
@@ -180,6 +200,31 @@ fun EditorScreen(modifier: Modifier = Modifier) {
         overrideEncoding: TextEncoding? = null,
     ) {
         isLoadingFile = true
+        // 先看文件大小：超过阈值就走“大文件只读”这条路，绝不把整篇读进内存
+        val sizeBytes = app.fileRepository.fileSize(path).getOrNull() ?: 0L
+        if (sizeBytes > thresholdMb.toLong() * 1024L * 1024L) {
+            app.fileRepository.buildLargeFileIndex(path).fold(
+                onSuccess = { index ->
+                    largeFileIndex = index
+                    openFilePath = path
+                    largeMatches = emptyList()
+                    matches = emptyList()
+                    currentMatchIndex = -1
+                    searchStatus = null
+                    editorText = ""
+                    savedText = ""
+                    textFormat = TextFormat(encoding = index.encoding, hasBom = index.hasBom)
+                    largeListState.scrollToItem(0)
+                },
+                onFailure = { showMessage(failureText(it.message)) },
+            )
+            isLoadingFile = false
+            return
+        }
+
+        // 普通文件：读完就回到正常（可编辑）模式
+        largeFileIndex = null
+        largeMatches = emptyList()
         app.fileRepository.readTextFile(path, overrideEncoding).fold(
             onSuccess = { content ->
                 openFilePath = path
@@ -263,6 +308,10 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     /** 切换编码 = 用新编码把文件重新读一遍（有未保存修改时先让用户处理） */
     fun switchEncoding(encoding: TextEncoding) {
         val path = openFilePath ?: return
+        if (isLargeMode) {
+            showMessage(msgEncodingSwitchDisabled)
+            return
+        }
         if (isModified) {
             showMessage(msgSaveBeforeSwitch)
             return
@@ -310,18 +359,41 @@ fun EditorScreen(modifier: Modifier = Modifier) {
         )
     }
 
+    /** 大文件里：滚到命中所在的那一块，并提示在第几行 */
+    fun selectLargeMatch(index: Int) {
+        val match = largeMatches.getOrNull(index) ?: return
+        currentMatchIndex = index
+        scope.launch { largeListState.animateScrollToItem(match.chunkIndex) }
+        showMessage(
+            String.format(Locale.getDefault(), msgJumpToMatch, match.lineNumber, match.snippet),
+        )
+    }
+
     fun findNext() {
+        if (largeFileIndex != null) {
+            val list = largeMatches
+            if (list.isEmpty()) return
+            selectLargeMatch(if (currentMatchIndex >= list.lastIndex) 0 else currentMatchIndex + 1)
+            return
+        }
         if (matches.isEmpty()) return
         selectMatch(if (currentMatchIndex >= matches.lastIndex) 0 else currentMatchIndex + 1)
     }
 
     fun findPrevious() {
+        if (largeFileIndex != null) {
+            val list = largeMatches
+            if (list.isEmpty()) return
+            selectLargeMatch(if (currentMatchIndex <= 0) list.lastIndex else currentMatchIndex - 1)
+            return
+        }
         if (matches.isEmpty()) return
         selectMatch(if (currentMatchIndex <= 0) matches.lastIndex else currentMatchIndex - 1)
     }
 
     /** 替换当前这一处匹配 */
     fun replaceCurrent() {
+        if (isLargeMode) return
         if (matches.getOrNull(currentMatchIndex) == null) return
         val result = TextSearch.replaceMatch(editorText, currentMatchIndex, currentSearchOptions())
         if (!result.replaced) {
@@ -339,6 +411,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
 
     /** 全部替换（先由界面确认过一次才调用） */
     fun replaceAll() {
+        if (isLargeMode) return
         val options = currentSearchOptions()
         scope.launch {
             val result = withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
@@ -368,14 +441,55 @@ fun EditorScreen(modifier: Modifier = Modifier) {
         wholeWord,
         multiline,
         editorText,
+        largeFileIndex,
     ) {
         if (!showFindPanel || searchQuery.isEmpty()) {
             matches = emptyList()
+            largeMatches = emptyList()
             currentMatchIndex = -1
             searchStatus = null
             isSearching = false
             return@LaunchedEffect
         }
+
+        // 大文件：一块一块地流式扫描（不把整篇读进内存）
+        val largeIndex = largeFileIndex
+        if (largeIndex != null) {
+            delay(300)
+            isSearching = true
+            val options = currentSearchOptions()
+            val result = withTimeoutOrNull(LARGE_SEARCH_TIMEOUT_MS) {
+                withContext(Dispatchers.IO) { LargeFileSearch.search(largeIndex, options) }
+            }
+            isSearching = false
+            matches = emptyList()
+            when {
+                result == null || result.timedOut -> {
+                    largeMatches = result?.matches.orEmpty()
+                    currentMatchIndex = if (largeMatches.isEmpty()) -1 else 0
+                    searchStatus = findTimeoutMessage
+                }
+
+                result.error != null -> {
+                    largeMatches = emptyList()
+                    currentMatchIndex = -1
+                    searchStatus = String.format(
+                        Locale.getDefault(),
+                        findInvalidRegexFormat,
+                        result.error,
+                    )
+                }
+
+                else -> {
+                    largeMatches = result.matches
+                    currentMatchIndex = if (result.matches.isEmpty()) -1 else 0
+                    searchStatus = null
+                }
+            }
+            return@LaunchedEffect
+        }
+
+        largeMatches = emptyList()
         delay(300)
         isSearching = true
         val options = currentSearchOptions()
@@ -414,7 +528,13 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     }
 
     // 总行数：文件内容变化后（停顿 400 毫秒）在后台数一次
-    LaunchedEffect(openFilePath, editorText) {
+    LaunchedEffect(openFilePath, editorText, largeFileIndex) {
+        val largeIndex = largeFileIndex
+        if (largeIndex != null) {
+            // 大文件：行数在建索引时已经数好了
+            totalLines = largeIndex.totalLines
+            return@LaunchedEffect
+        }
         if (openFilePath == null) {
             totalLines = null
             return@LaunchedEffect
@@ -424,7 +544,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     }
 
     // 当前行号：每 2 秒算一次（在后台线程算，不卡界面）
-    LaunchedEffect(showCurrentLine, openFilePath) {
+    LaunchedEffect(showCurrentLine, openFilePath, largeFileIndex) {
         if (!showCurrentLine || openFilePath == null) {
             currentLine = null
             lineBadgeVisible = false
@@ -432,8 +552,14 @@ fun EditorScreen(modifier: Modifier = Modifier) {
         }
         while (true) {
             delay(LINE_TICK_MS)
-            val line = withContext(Dispatchers.Default) {
-                LineCounter.lineOfOffset(editorText, cursorOffset)
+            val largeIndex = largeFileIndex
+            val line = if (largeIndex != null) {
+                // 只读模式没有光标，就用“当前屏幕最上面那一块”的第一行
+                largeIndex.firstLineOfChunk(largeListState.firstVisibleItemIndex)
+            } else {
+                withContext(Dispatchers.Default) {
+                    LineCounter.lineOfOffset(editorText, cursorOffset)
+                }
             }
             // 只有行号真的变了才更新 —— 光标没动就不会反复触发动画
             if (line != currentLine) currentLine = line
@@ -513,7 +639,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                 EditorTopBar(
                     title = fileName ?: stringResource(R.string.app_name),
                     isModified = isModified,
-                    canSave = openFilePath != null && isModified,
+                    canSave = openFilePath != null && isModified && !isLargeMode,
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onSaveClick = { saveFile() },
                     onFindClick = { showFindPanel = !showFindPanel },
@@ -523,6 +649,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                     onToggleCurrentLine = {
                         scope.launch { app.settingsStore.setShowCurrentLine(!showCurrentLine) }
                     },
+                    onOpenLargeFileThreshold = { showThresholdSheet = true },
                 )
             },
             bottomBar = {
@@ -533,6 +660,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                     totalLines = totalLines,
                     currentLine = currentLine,
                     showCurrentLine = showCurrentLine,
+                    readOnly = isLargeMode,
                 )
             },
             snackbarHost = {
@@ -545,6 +673,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                     .padding(innerPadding),
             ) {
                 Box(modifier = Modifier.weight(1f)) {
+                    val largeIndex = largeFileIndex
                     when {
                         isLoadingFile -> Column(
                             modifier = Modifier.fillMaxSize(),
@@ -560,6 +689,17 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                                 textAlign = TextAlign.Center,
                             )
                         }
+
+                        largeIndex != null -> LargeFileViewer(
+                            index = largeIndex,
+                            listState = largeListState,
+                            notice = String.format(
+                                Locale.getDefault(),
+                                largeNoticeFormat,
+                                String.format(Locale.US, "%.1f", largeIndex.sizeBytes / 1048576.0),
+                            ),
+                            modifier = Modifier.fillMaxSize(),
+                        )
 
                         openFilePath != null -> PlainTextEditor(
                             text = editorText,
@@ -617,12 +757,12 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                         onWholeWordChange = { wholeWord = it },
                         multiline = multiline,
                         onMultilineChange = { multiline = it },
-                        matchCount = matches.size,
+                        matchCount = if (isLargeMode) largeMatches.size else matches.size,
                         currentIndex = if (currentMatchIndex < 0) 0 else currentMatchIndex,
                         isSearching = isSearching,
                         statusMessage = searchStatus,
-                        // 大文件只读模式在下一阶段实现，这里先留好接口
-                        readOnly = false,
+                        // 大文件只读：替换按钮会变灰并给提示
+                        readOnly = isLargeMode,
                         onPrevious = { findPrevious() },
                         onNext = { findNext() },
                         onReplace = { replaceCurrent() },
@@ -685,6 +825,43 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                         onClick = {
                             showLineEndingSheet = false
                             switchLineEnding(lineEnding)
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    // ---------------- 大文件阈值 ----------------
+    if (showThresholdSheet) {
+        ModalBottomSheet(onDismissRequest = { showThresholdSheet = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.sheet_title_large_file_threshold),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 4.dp),
+                )
+                Text(
+                    text = stringResource(R.string.sheet_large_file_threshold_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
+                )
+                HorizontalDivider()
+                listOf(1, 2, 5, 10, 20, 50).forEach { megabytes ->
+                    val label = stringResource(R.string.large_file_threshold_option, megabytes) +
+                        if (megabytes == thresholdMb) currentSuffix else ""
+                    ActionSheetRow(
+                        text = label,
+                        onClick = {
+                            showThresholdSheet = false
+                            scope.launch {
+                                app.settingsStore.setLargeFileThresholdMb(megabytes)
+                            }
                         },
                     )
                 }

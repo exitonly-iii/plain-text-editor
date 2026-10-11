@@ -30,8 +30,8 @@ android {
         targetSdk = 36
 
         // 应用版本号（每次发新版：versionCode 加 1，versionName 可以写 0.2.0）
-        versionCode = 8
-        versionName = "0.8.0"
+        versionCode = 9
+        versionName = "0.9.0"
     }
 
     signingConfigs {
