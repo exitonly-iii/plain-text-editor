@@ -1,4 +1,4 @@
-package com.example.plaintexteditor.ui.browser
+package com.example.plaintexteditor.ui.common
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
@@ -14,6 +14,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.example.plaintexteditor.R
 import com.example.plaintexteditor.data.model.FileItem
+
+/**
+ * 全应用共用的两个弹窗：为了让“文件浏览器”和“侧边栏工作区”都能用同一套界面。
+ * （第三阶段它们住在 ui/browser 里，本阶段搬到了 ui/common。）
+ */
 
 /**
  * 输入名字的小弹窗：新建文件夹、新建文本文件、重命名都用它。

@@ -28,8 +28,11 @@ class PlainTextEditorApp : Application() {
     }
 
     companion object {
-        /** 从任何 Context 里拿到本应用实例 */
-        fun from(context: Context): PlainTextEditorApp =
-            context.applicationContext as PlainTextEditorApp
+        /**
+         * 从任何 Context 里拿到本应用实例。
+         * 在 Android Studio 的“设计预览”里拿不到（返回 null），真机运行时一定拿得到。
+         */
+        fun from(context: Context): PlainTextEditorApp? =
+            context.applicationContext as? PlainTextEditorApp
     }
 }

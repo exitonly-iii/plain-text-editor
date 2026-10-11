@@ -54,6 +54,8 @@ import com.example.plaintexteditor.data.model.FileItem
 import com.example.plaintexteditor.data.model.WorkspaceType
 import com.example.plaintexteditor.data.repository.FileRepository
 import com.example.plaintexteditor.data.workspace.WorkspaceStore
+import com.example.plaintexteditor.ui.common.ConfirmDeleteDialog
+import com.example.plaintexteditor.ui.common.NameInputDialog
 import java.util.Locale
 import kotlinx.coroutines.launch
 

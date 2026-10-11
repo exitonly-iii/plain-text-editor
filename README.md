@@ -57,14 +57,17 @@ plain-text-editor/                        ← 项目根目录（名字可以自�
             │       │   ├── FileBrowserScreen.kt          ← 页面主体（面包屑 + 列表 + 弹窗）
             │       │   ├── FileEntryRow.kt               ← 列表里的一行
             │       │   ├── FileActionSheet.kt            ← 底部操作菜单 / 新建 / 选择目标文件夹
-            │       │   ├── FileBrowserDialogs.kt         ← 输入名字、删除确认
             │       │   └── FileBrowserFormatters.kt      ← 大小 / 时间 / 路径的显示格式
+            │       ├── common/                           ← 两个页面共用的界面零件
+            │       │   ├── FileActionDialogs.kt          ← 输入名字、删除确认
+            │       │   └── ActionSheetRow.kt             ← 底部菜单里的一行
             │       ├── theme/
             │       │   ├── Color.kt                      ← 浅色/深色配色
             │       │   ├── Theme.kt                      ← 主题（含浅色/深色/跟随系统）
             │       │   └── Type.kt                       ← 字体样式
             │       └── editor/
             │           ├── EditorScreen.kt               ← 主界面总装
+            │           ├── WorkspaceTree.kt              ← 侧边栏工作区文件树（第四阶段新增）
             │           ├── EditorTopBar.kt               ← 顶部栏
             │           ├── WorkspaceDrawer.kt            ← 侧边栏（工作区）
             │           ├── EditorStatusBar.kt            ← 底部状态栏
@@ -325,12 +328,40 @@ v0.1.x 用的是 GitHub Actions 每次临时生成的调试密钥，所以那几
 | `ui/browser/FileBrowserScreen.kt` | 页面主体：顶部栏、面包屑、列表、各种弹窗的组装 |
 | `ui/browser/FileEntryRow.kt` | 列表里的一行（图标 / 名字 / 大小时间 / 更多按钮） |
 | `ui/browser/FileActionSheet.kt` | 底部操作菜单、新建菜单、选择目标文件夹 |
-| `ui/browser/FileBrowserDialogs.kt` | 输入名字的弹窗、删除确认弹窗 |
+| `ui/common/FileActionDialogs.kt` | 输入名字的弹窗、删除确认弹窗（两个页面共用） |
 | `ui/browser/FileBrowserFormatters.kt` | 大小 / 时间 / 路径的显示格式 |
 | `res/drawable/ic_folder.xml`、`ic_file.xml` | 文件夹和文件的图标（矢量图，不需要图片文件） |
 
 ### 后续阶段要做的
 
-- 侧边栏工作区列表（本阶段只在侧边栏显示“已添加 N 个工作区”）
 - 编辑区接文件：`PlainTextEditor` 已经是可用控件，把 `readText` 的内容传进去即可
 - 设置页里的浅色/深色/跟随系统开关（`ThemeMode` 已支持三种）
+
+---
+
+## 九、侧边栏工作区文件树（第四阶段已完成）
+
+侧边栏现在就是“工作区资源管理器”，逻辑参考 VS Code，但为手机触摸做了简化。
+
+能做到的事：
+
+- 顶部标题「工作区」，下面就是阶段二保存下来的工作区列表（存在 DataStore 里）
+- 文件夹工作区可以一层层展开/收起（每层缩进 16dp，整行高度 ≥ 48dp，手指点得准）
+- 文件工作区直接显示成一个可点的条目
+- **点文件**：自动收起侧边栏，把文件路径交给编辑区（本阶段只传路径，不读内容）
+- **长按任意一行**：弹出菜单 → 从工作区移除（仅当这一行本身就是工作区）/ 重命名 / 删除
+- 工作区为空时，中间显示「暂无工作区，点击下方浏览私有目录添加」
+- 底部仍是「浏览私有目录」按钮（打开第三阶段的文件浏览器）和设置入口（占位）
+
+同步关系：工作区列表来自 DataStore 的 `Flow`，所以在文件浏览器里“添加到工作区”之后，
+侧边栏会立刻出现；从浏览器返回、或在树里做了重命名/删除，树会自动重新读一遍磁盘。
+
+相关文件：
+
+| 文件 | 作用 |
+| --- | --- |
+| `ui/editor/WorkspaceTree.kt` | 工作区文件树：递归展开、长按菜单、重命名/删除弹窗 |
+| `ui/editor/WorkspaceDrawer.kt` | 侧边栏外壳：标题、文件树、底部按钮 |
+| `ui/editor/EditorScreen.kt` | 主界面：接收“被点中的文件路径”，并负责提示条与刷新 |
+| `ui/editor/NoFileOpenedPlaceholder.kt` | 编辑区占位（未选文件 / 已选文件显示路径） |
+| `ui/common/ActionSheetRow.kt` | 底部菜单里的一行（两个页面共用） |

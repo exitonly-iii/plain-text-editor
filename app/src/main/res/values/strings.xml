@@ -66,5 +66,16 @@
     <string name="message_already_in_workspace">这个已经在工作区里了</string>
     <string name="message_operation_failed">操作失败：%1$s</string>
     <string name="error_unknown">未知错误</string>
-    <string name="workspace_count_hint">已添加 %1$d 个工作区（列表视图将在下一阶段完成）</string>
+
+    <!-- 侧边栏：工作区文件树 -->
+    <string name="workspace_remove">从工作区移除</string>
+    <string name="workspace_removed">已从工作区移除</string>
+    <string name="tree_expand">展开</string>
+    <string name="tree_collapse">收起</string>
+    <string name="tree_missing">找不到这个工作区（可能已被删除）</string>
+    <string name="tree_empty">这里没有内容</string>
+
+    <!-- 编辑区：已选择文件（本阶段只接收路径，不读内容） -->
+    <string name="editor_selected_file_title">已选择文件</string>
+    <string name="editor_selected_file_hint">文件内容的读取与保存将在下一阶段实现</string>
 </resources>

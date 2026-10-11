@@ -1,6 +1,5 @@
 package com.example.plaintexteditor.ui.browser
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,7 +12,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -26,7 +24,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.example.plaintexteditor.R
 import com.example.plaintexteditor.data.model.FileItem
 import com.example.plaintexteditor.data.repository.FileRepository
+import com.example.plaintexteditor.ui.common.ActionSheetRow
 
 /**
  * 底部弹出的操作菜单。长按某一行，或点那一行右边的“更多”，都会弹出它。
@@ -63,15 +61,15 @@ fun FileActionSheet(
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
             )
             HorizontalDivider()
-            SheetRow(
+            ActionSheetRow(
                 text = stringResource(R.string.action_add_to_workspace),
                 onClick = onAddToWorkspace,
             )
-            SheetRow(text = stringResource(R.string.action_rename), onClick = onRename)
-            SheetRow(text = stringResource(R.string.action_copy), onClick = onCopy)
-            SheetRow(text = stringResource(R.string.action_move), onClick = onMove)
+            ActionSheetRow(text = stringResource(R.string.action_rename), onClick = onRename)
+            ActionSheetRow(text = stringResource(R.string.action_copy), onClick = onCopy)
+            ActionSheetRow(text = stringResource(R.string.action_move), onClick = onMove)
             HorizontalDivider()
-            SheetRow(
+            ActionSheetRow(
                 text = stringResource(R.string.action_delete),
                 onClick = onDelete,
                 color = MaterialTheme.colorScheme.error,
@@ -102,8 +100,8 @@ fun NewItemSheet(
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
             )
             HorizontalDivider()
-            SheetRow(text = stringResource(R.string.action_new_folder), onClick = onNewFolder)
-            SheetRow(text = stringResource(R.string.action_new_file), onClick = onNewFile)
+            ActionSheetRow(text = stringResource(R.string.action_new_folder), onClick = onNewFolder)
+            ActionSheetRow(text = stringResource(R.string.action_new_file), onClick = onNewFile)
         }
     }
 }
@@ -158,7 +156,7 @@ fun DestinationPickerSheet(
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
             )
             if (pickerPath.isNotEmpty()) {
-                SheetRow(
+                ActionSheetRow(
                     text = stringResource(R.string.browser_up),
                     onClick = { pickerPath = parentPathOf(pickerPath) },
                 )
@@ -201,7 +199,7 @@ fun DestinationPickerSheet(
 
                     else -> LazyColumn {
                         items(directories, key = { it.path }) { directory ->
-                            SheetRow(
+                            ActionSheetRow(
                                 text = directory.name,
                                 onClick = { pickerPath = directory.path },
                             )
@@ -221,24 +219,4 @@ fun DestinationPickerSheet(
             }
         }
     }
-}
-
-/** 弹窗里的一行操作：整行可点，高度 ≥ 48dp，方便手指点。 */
-@Composable
-private fun SheetRow(
-    text: String,
-    onClick: () -> Unit,
-    color: Color = Color.Unspecified,
-) {
-    ListItem(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        headlineContent = {
-            Text(
-                text = text,
-                color = color,
-            )
-        },
-    )
 }
