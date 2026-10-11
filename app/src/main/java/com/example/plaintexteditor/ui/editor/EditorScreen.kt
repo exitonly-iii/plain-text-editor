@@ -44,6 +44,9 @@ import androidx.compose.ui.unit.dp
 import com.example.plaintexteditor.PlainTextEditorApp
 import com.example.plaintexteditor.R
 import com.example.plaintexteditor.data.text.LineEnding
+import com.example.plaintexteditor.data.search.SearchMatch
+import com.example.plaintexteditor.data.search.SearchOptions
+import com.example.plaintexteditor.data.search.TextSearch
 import com.example.plaintexteditor.data.text.TextEncoding
 import com.example.plaintexteditor.data.text.TextFormat
 import com.example.plaintexteditor.data.text.TextFormats
@@ -52,11 +55,17 @@ import com.example.plaintexteditor.ui.common.ActionSheetRow
 import com.example.plaintexteditor.ui.theme.PlainTextEditorTheme
 import com.example.plaintexteditor.ui.theme.ThemeMode
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** 编辑中每隔多久把内容写一份草稿（不碰原文件） */
 private const val DRAFT_AUTO_SAVE_INTERVAL_MS = 10_000L
+
+/** 一次查找最多等多久（毫秒）；超过就放弃等待，避免正则把界面卡住 */
+private const val SEARCH_TIMEOUT_MS = 3_000L
 
 /** 打开文件时发现有草稿，先记下来，等用户决定“恢复”还是“丢弃” */
 private data class DraftPrompt(val path: String, val content: String)
@@ -102,6 +111,22 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     var pendingOpenPath by remember { mutableStateOf<String?>(null) }
     var pendingDraft by remember { mutableStateOf<DraftPrompt?>(null) }
 
+    // ---------------- 查找替换状态 ----------------
+    var showFindPanel by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var replaceQuery by remember { mutableStateOf("") }
+    var useRegex by remember { mutableStateOf(false) }
+    var caseSensitive by remember { mutableStateOf(false) }
+    var wholeWord by remember { mutableStateOf(false) }
+    var multiline by remember { mutableStateOf(false) }
+    var matches by remember { mutableStateOf(emptyList<SearchMatch>()) }
+    var currentMatchIndex by remember { mutableStateOf(-1) }
+    var searchStatus by remember { mutableStateOf<String?>(null) }
+    var isSearching by remember { mutableStateOf(false) }
+    var selectionRequest by remember { mutableStateOf<SelectionRequest?>(null) }
+    var selectionToken by remember { mutableStateOf(0) }
+    var confirmReplaceAll by remember { mutableStateOf(false) }
+
     val isModified = openFilePath != null && editorText != savedText
     val fileName = openFilePath?.substringAfterLast('/')
 
@@ -113,6 +138,10 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     val msgDraftDiscarded = stringResource(R.string.message_draft_discarded)
     val msgSaveBeforeSwitch = stringResource(R.string.message_save_before_switch_encoding)
     val currentSuffix = stringResource(R.string.label_current)
+    val findTimeoutMessage = stringResource(R.string.find_timeout)
+    val findInvalidRegexFormat = stringResource(R.string.find_invalid_regex)
+    val msgReplacedCount = stringResource(R.string.message_replaced_count)
+    val msgReplaceFailed = stringResource(R.string.message_replace_failed)
 
     fun failureText(detail: String?): String =
         String.format(Locale.getDefault(), failureFormat, detail ?: unknownError)
@@ -241,6 +270,131 @@ fun EditorScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    // ---------------- 查找替换 ----------------
+    fun currentSearchOptions(): SearchOptions = SearchOptions(
+        query = searchQuery,
+        replacement = replaceQuery,
+        useRegex = useRegex,
+        caseSensitive = caseSensitive,
+        wholeWord = wholeWord,
+        multiline = multiline,
+    )
+
+    /** 把光标/选区跳到第 index 个匹配上，并让编辑区滚动到它 */
+    fun selectMatch(index: Int) {
+        val match = matches.getOrNull(index) ?: return
+        currentMatchIndex = index
+        selectionToken += 1
+        selectionRequest = SelectionRequest(
+            token = selectionToken,
+            start = match.start,
+            end = match.end,
+        )
+    }
+
+    fun findNext() {
+        if (matches.isEmpty()) return
+        selectMatch(if (currentMatchIndex >= matches.lastIndex) 0 else currentMatchIndex + 1)
+    }
+
+    fun findPrevious() {
+        if (matches.isEmpty()) return
+        selectMatch(if (currentMatchIndex <= 0) matches.lastIndex else currentMatchIndex - 1)
+    }
+
+    /** 替换当前这一处匹配 */
+    fun replaceCurrent() {
+        if (matches.getOrNull(currentMatchIndex) == null) return
+        val result = TextSearch.replaceMatch(editorText, currentMatchIndex, currentSearchOptions())
+        if (!result.replaced) {
+            showMessage(msgReplaceFailed)
+            return
+        }
+        editorText = result.text
+        selectionToken += 1
+        selectionRequest = SelectionRequest(
+            token = selectionToken,
+            start = result.selection,
+            end = result.selection,
+        )
+    }
+
+    /** 全部替换（先由界面确认过一次才调用） */
+    fun replaceAll() {
+        val options = currentSearchOptions()
+        scope.launch {
+            val result = withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
+                withContext(Dispatchers.Default) { TextSearch.replaceAll(editorText, options) }
+            }
+            when {
+                result == null || result.timedOut -> showMessage(findTimeoutMessage)
+                result.error != null -> showMessage(
+                    String.format(Locale.getDefault(), findInvalidRegexFormat, result.error),
+                )
+
+                result.count == 0 -> showMessage(msgReplaceFailed)
+                else -> {
+                    editorText = result.text
+                    showMessage(String.format(Locale.getDefault(), msgReplacedCount, result.count))
+                }
+            }
+        }
+    }
+
+    // 查找：输入停 300 毫秒后才算；真正计算丢到后台线程，最多等 SEARCH_TIMEOUT_MS
+    LaunchedEffect(
+        showFindPanel,
+        searchQuery,
+        useRegex,
+        caseSensitive,
+        wholeWord,
+        multiline,
+        editorText,
+    ) {
+        if (!showFindPanel || searchQuery.isEmpty()) {
+            matches = emptyList()
+            currentMatchIndex = -1
+            searchStatus = null
+            isSearching = false
+            return@LaunchedEffect
+        }
+        delay(300)
+        isSearching = true
+        val options = currentSearchOptions()
+        val result = withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
+            withContext(Dispatchers.Default) { TextSearch.find(editorText, options) }
+        }
+        isSearching = false
+        when {
+            result == null -> {
+                matches = emptyList()
+                currentMatchIndex = -1
+                searchStatus = findTimeoutMessage
+            }
+
+            result.error != null -> {
+                matches = emptyList()
+                currentMatchIndex = -1
+                searchStatus = String.format(
+                    Locale.getDefault(),
+                    findInvalidRegexFormat,
+                    result.error,
+                )
+            }
+
+            else -> {
+                matches = result.matches
+                // 尽量保住当前选中的那一处；越界了就回到第一处
+                currentMatchIndex = when {
+                    result.matches.isEmpty() -> -1
+                    currentMatchIndex in result.matches.indices -> currentMatchIndex
+                    else -> 0
+                }
+                searchStatus = if (result.timedOut) findTimeoutMessage else null
+            }
+        }
+    }
+
     // ---------------- 文件浏览器 ----------------
     if (showFileBrowser) {
         BackHandler { showFileBrowser = false }
@@ -306,9 +460,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                     canSave = openFilePath != null && isModified,
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onSaveClick = { saveFile() },
-                    onFindClick = {
-                        // 占位：下一阶段实现查找替换
-                    },
+                    onFindClick = { showFindPanel = !showFindPanel },
                     onSwitchEncoding = { showEncodingSheet = true },
                     onSwitchLineEnding = { showLineEndingSheet = true },
                 )
@@ -324,34 +476,66 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                 SnackbarHost(snackbarHostState)
             },
         ) { innerPadding ->
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
             ) {
-                when {
-                    isLoadingFile -> Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        CircularProgressIndicator()
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.editor_loading_file),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
+                Box(modifier = Modifier.weight(1f)) {
+                    when {
+                        isLoadingFile -> Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            CircularProgressIndicator()
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = stringResource(R.string.editor_loading_file),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+
+                        openFilePath != null -> PlainTextEditor(
+                            text = editorText,
+                            onTextChange = { editorText = it },
+                            modifier = Modifier.fillMaxSize(),
+                            selectionRequest = selectionRequest,
                         )
+
+                        else -> NoFileOpenedPlaceholder(modifier = Modifier.fillMaxSize())
                     }
+                }
 
-                    openFilePath != null -> PlainTextEditor(
-                        text = editorText,
-                        onTextChange = { editorText = it },
-                        modifier = Modifier.fillMaxSize(),
+                // 查找替换面板：贴在编辑区下方、状态栏上方
+                if (showFindPanel) {
+                    FindReplacePanel(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        replacement = replaceQuery,
+                        onReplacementChange = { replaceQuery = it },
+                        useRegex = useRegex,
+                        onUseRegexChange = { useRegex = it },
+                        caseSensitive = caseSensitive,
+                        onCaseSensitiveChange = { caseSensitive = it },
+                        wholeWord = wholeWord,
+                        onWholeWordChange = { wholeWord = it },
+                        multiline = multiline,
+                        onMultilineChange = { multiline = it },
+                        matchCount = matches.size,
+                        currentIndex = if (currentMatchIndex < 0) 0 else currentMatchIndex,
+                        isSearching = isSearching,
+                        statusMessage = searchStatus,
+                        // 大文件只读模式在下一阶段实现，这里先留好接口
+                        readOnly = false,
+                        onPrevious = { findPrevious() },
+                        onNext = { findNext() },
+                        onReplace = { replaceCurrent() },
+                        onReplaceAll = { confirmReplaceAll = true },
+                        onClose = { showFindPanel = false },
                     )
-
-                    else -> NoFileOpenedPlaceholder(modifier = Modifier.fillMaxSize())
                 }
             }
         }
@@ -503,6 +687,37 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                     },
                 ) {
                     Text(text = stringResource(R.string.action_discard_draft))
+                }
+            },
+        )
+    }
+
+    // ---------------- 全部替换：先确认 ----------------
+    if (confirmReplaceAll) {
+        AlertDialog(
+            onDismissRequest = { confirmReplaceAll = false },
+            title = { Text(text = stringResource(R.string.dialog_replace_all_title)) },
+            text = {
+                Text(
+                    text = stringResource(
+                        R.string.dialog_replace_all_message,
+                        matches.size,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmReplaceAll = false
+                        replaceAll()
+                    },
+                ) {
+                    Text(text = stringResource(R.string.action_replace_all))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReplaceAll = false }) {
+                    Text(text = stringResource(R.string.dialog_cancel))
                 }
             },
         )

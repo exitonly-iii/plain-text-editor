@@ -17,6 +17,16 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 
 /**
+ * 一次“请把光标 / 选区放到这里”的请求。
+ * token 每次变化才会被应用一次，所以不会和用户自己的光标打架。
+ */
+data class SelectionRequest(
+    val token: Int,
+    val start: Int,
+    val end: Int,
+)
+
+/**
  * 编辑区（真正的文本输入控件）。
  *
  * 为什么这里用 AndroidView + EditText，而不是 Compose 自带的 TextField？
@@ -26,6 +36,7 @@ import androidx.compose.ui.viewinterop.AndroidView
  * @param text 当前文本（由上层保存，控件只负责显示和回调）
  * @param onTextChange 用户每打一个字都会回调一次，把最新文本交回上层
  * @param monospace 是否用等宽字体。默认 false = 用系统默认字体（本阶段的要求）
+ * @param selectionRequest 一次性请求：把光标 / 选区放到指定位置（查找跳转、替换后定位用）
  */
 @Composable
 fun PlainTextEditor(
@@ -33,6 +44,7 @@ fun PlainTextEditor(
     onTextChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     monospace: Boolean = false,
+    selectionRequest: SelectionRequest? = null,
 ) {
     // 始终拿到最新的回调函数，避免控件里存着旧的 lambda
     val currentOnTextChange by rememberUpdatedState(newValue = onTextChange)
@@ -100,6 +112,20 @@ fun PlainTextEditor(
             if (editText.text.toString() != text) {
                 editText.setText(text)
                 editText.setSelection(0)
+            }
+
+            // 上层要求“把光标 / 选区放到这里”（查找跳转、替换后定位）。
+            // 用控件自己的 tag 记住上一次处理过的 token，同一个请求只应用一次。
+            val request = selectionRequest
+            if (request != null && (editText.tag as? Int) != request.token) {
+                editText.tag = request.token
+                val length = editText.text.length
+                val start = request.start.coerceIn(0, length)
+                val end = request.end.coerceIn(0, length)
+                editText.requestFocus()
+                editText.setSelection(minOf(start, end), maxOf(start, end))
+                // 让选中的位置滚到可见区域；个别机型不支持时忽略即可
+                runCatching { editText.bringPointIntoView(end) }
             }
         },
     )
