@@ -1,18 +1,23 @@
 package com.example.plaintexteditor.ui.editor
 
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -21,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,19 +43,33 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.plaintexteditor.PlainTextEditorApp
 import com.example.plaintexteditor.R
+import com.example.plaintexteditor.data.text.LineEnding
+import com.example.plaintexteditor.data.text.TextEncoding
+import com.example.plaintexteditor.data.text.TextFormat
+import com.example.plaintexteditor.data.text.TextFormats
 import com.example.plaintexteditor.ui.browser.FileBrowserScreen
+import com.example.plaintexteditor.ui.common.ActionSheetRow
 import com.example.plaintexteditor.ui.theme.PlainTextEditorTheme
 import com.example.plaintexteditor.ui.theme.ThemeMode
 import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** 编辑中每隔多久把内容写一份草稿（不碰原文件） */
+private const val DRAFT_AUTO_SAVE_INTERVAL_MS = 10_000L
+
+/** 打开文件时发现有草稿，先记下来，等用户决定“恢复”还是“丢弃” */
+private data class DraftPrompt(val path: String, val content: String)
+
 /**
- * 主界面，也是“编辑区”的状态大本营：
+ * 主界面，也是编辑区的状态大本营：
  *
- * - 当前打开的文件路径、当前文本、打开时的文本（用来判断“有没有改动”）
- * - 打开文件 / 保存文件 / 切换文件时提示保存
- * - 侧边栏（工作区文件树）和文件浏览器里点文件，都会回到这里打开
+ * - 当前文件路径、当前文本、打开/保存时的文本（用来判断有没有改动）
+ * - 编码与换行符：打开时自动检测，保存时按原样写回，也可以手动切换
+ * - 草稿：编辑中定期把内容写进私有缓存目录；下次打开同一文件时问要不要恢复
+ * - 退出与切换文件时的“保存 / 放弃 / 取消”提示
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -66,21 +86,21 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     val snackbarHostState = remember { SnackbarHostState() }
     val workspaces by app.workspaceStore.workspaces.collectAsState(initial = emptyList())
 
-    // 侧边栏里的文件树要不要重新读一遍磁盘（改了文件之后 +1）
+    // ---------------- 界面开关 ----------------
     var treeRefreshKey by remember { mutableStateOf(0) }
-    // 是否正在全屏显示“文件浏览器”
     var showFileBrowser by rememberSaveable { mutableStateOf(false) }
+    var showEncodingSheet by remember { mutableStateOf(false) }
+    var showLineEndingSheet by remember { mutableStateOf(false) }
+    var showExitDialog by remember { mutableStateOf(false) }
 
     // ---------------- 编辑区状态 ----------------
-    /** 当前打开的文件（相对私有根目录的路径）；null = 还没打开文件 */
     var openFilePath by rememberSaveable { mutableStateOf<String?>(null) }
-    /** 编辑区里现在的文本 */
     var editorText by rememberSaveable { mutableStateOf("") }
-    /** 打开时（或上次保存时）的文本，用来判断有没有改动 */
     var savedText by rememberSaveable { mutableStateOf("") }
+    var textFormat by remember { mutableStateOf(TextFormat()) }
     var isLoadingFile by remember { mutableStateOf(false) }
-    /** 有未保存修改时，用户想打开的新文件先放这里，等他在弹窗里选“保存”或“放弃” */
     var pendingOpenPath by remember { mutableStateOf<String?>(null) }
+    var pendingDraft by remember { mutableStateOf<DraftPrompt?>(null) }
 
     val isModified = openFilePath != null && editorText != savedText
     val fileName = openFilePath?.substringAfterLast('/')
@@ -89,6 +109,11 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     val unknownError = stringResource(R.string.error_unknown)
     val failureFormat = stringResource(R.string.message_operation_failed)
     val msgSaved = stringResource(R.string.message_saved)
+    val msgDraftRestored = stringResource(R.string.message_draft_restored)
+    val msgDraftDiscarded = stringResource(R.string.message_draft_discarded)
+    val msgSaveBeforeSwitch = stringResource(R.string.message_save_before_switch_encoding)
+    val currentSuffix = stringResource(R.string.label_current)
+
     fun failureText(detail: String?): String =
         String.format(Locale.getDefault(), failureFormat, detail ?: unknownError)
 
@@ -96,14 +121,30 @@ fun EditorScreen(modifier: Modifier = Modifier) {
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
 
-    /** 真正去读文件内容（挂起函数，读完了才往下走） */
-    suspend fun readInto(path: String) {
+    fun closeApp() {
+        (context as? Activity)?.finish()
+    }
+
+    // ---------------- 打开 / 保存 ----------------
+    /** 真正去读文件：检测编码与换行符；需要时再检查有没有草稿 */
+    suspend fun readInto(
+        path: String,
+        checkDraft: Boolean,
+        overrideEncoding: TextEncoding? = null,
+    ) {
         isLoadingFile = true
-        app.fileRepository.readText(path).fold(
+        app.fileRepository.readTextFile(path, overrideEncoding).fold(
             onSuccess = { content ->
                 openFilePath = path
-                editorText = content
-                savedText = content
+                editorText = content.text
+                savedText = content.text
+                textFormat = content.format
+                if (checkDraft) {
+                    val draft = app.draftStore.read(path).getOrNull()
+                    if (!draft.isNullOrEmpty() && draft != content.text) {
+                        pendingDraft = DraftPrompt(path, draft)
+                    }
+                }
             },
             onFailure = { showMessage(failureText(it.message)) },
         )
@@ -111,7 +152,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
     }
 
     fun loadFile(path: String) {
-        scope.launch { readInto(path) }
+        scope.launch { readInto(path, checkDraft = true) }
     }
 
     /** 打开文件；如果当前文件有未保存修改，先问一句 */
@@ -123,33 +164,80 @@ fun EditorScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    /** 把内容按当前编码/换行符写回文件；成功返回 true */
+    suspend fun writeCurrent(path: String, content: String): Boolean =
+        app.fileRepository.writeTextFile(path, content, textFormat).fold(
+            onSuccess = {
+                savedText = content
+                // 保存成功，草稿就没用了
+                app.draftStore.delete(path)
+                showMessage(msgSaved)
+                true
+            },
+            onFailure = {
+                showMessage(failureText(it.message))
+                false
+            },
+        )
+
     fun saveFile() {
         val path = openFilePath ?: return
         val content = editorText
-        scope.launch {
-            app.fileRepository.writeText(path, content).fold(
-                onSuccess = {
-                    savedText = content
-                    showMessage(msgSaved)
-                },
-                onFailure = { showMessage(failureText(it.message)) },
-            )
-        }
+        scope.launch { writeCurrent(path, content) }
     }
 
-    /** 先保存当前文件，保存成功后再打开新文件（顺序执行，避免互相打架） */
+    /** 先保存当前文件，保存成功后再打开新文件 */
     fun saveThenOpen(path: String) {
         val currentPath = openFilePath ?: return
         val content = editorText
         scope.launch {
-            app.fileRepository.writeText(currentPath, content).fold(
-                onSuccess = {
-                    savedText = content
-                    showMessage(msgSaved)
-                    readInto(path)
-                },
-                onFailure = { showMessage(failureText(it.message)) },
-            )
+            if (writeCurrent(currentPath, content)) {
+                readInto(path, checkDraft = true)
+            }
+        }
+    }
+
+    fun saveAndExit() {
+        val path = openFilePath
+        val content = editorText
+        scope.launch {
+            if (path == null || writeCurrent(path, content)) closeApp()
+        }
+    }
+
+    fun discardAndExit() {
+        val path = openFilePath
+        scope.launch {
+            if (path != null) app.draftStore.delete(path)
+            closeApp()
+        }
+    }
+
+    /** 切换编码 = 用新编码把文件重新读一遍（有未保存修改时先让用户处理） */
+    fun switchEncoding(encoding: TextEncoding) {
+        val path = openFilePath ?: return
+        if (isModified) {
+            showMessage(msgSaveBeforeSwitch)
+            return
+        }
+        scope.launch { readInto(path, checkDraft = false, overrideEncoding = encoding) }
+    }
+
+    /** 切换换行符 = 直接把内存里的换行符换掉（保存时才写进文件） */
+    fun switchLineEnding(lineEnding: LineEnding) {
+        if (openFilePath == null) return
+        textFormat = textFormat.copy(lineEnding = lineEnding)
+        editorText = TextFormats.convertLineEndings(editorText, lineEnding)
+    }
+
+    // 编辑中每隔一段时间写一份草稿，这样即使应用被杀掉也不会丢内容
+    LaunchedEffect(openFilePath, isModified) {
+        if (openFilePath == null || !isModified) return@LaunchedEffect
+        while (true) {
+            delay(DRAFT_AUTO_SAVE_INTERVAL_MS)
+            val path = openFilePath ?: break
+            if (editorText == savedText) break
+            app.draftStore.save(path, editorText)
         }
     }
 
@@ -161,7 +249,6 @@ fun EditorScreen(modifier: Modifier = Modifier) {
             workspaceStore = app.workspaceStore,
             onClose = {
                 showFileBrowser = false
-                // 浏览器里可能新建/删除/重命名过文件，回来后让树重新读一遍
                 treeRefreshKey++
             },
             onFileClick = { item ->
@@ -171,6 +258,16 @@ fun EditorScreen(modifier: Modifier = Modifier) {
             modifier = modifier,
         )
         return
+    }
+
+    // 有未保存修改时，系统返回键先弹提示，不直接退出
+    BackHandler(enabled = isModified) {
+        val path = openFilePath
+        if (path != null) {
+            val content = editorText
+            scope.launch { app.draftStore.save(path, content) }
+        }
+        showExitDialog = true
     }
 
     ModalNavigationDrawer(
@@ -187,7 +284,7 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                     showFileBrowser = true
                 },
                 onOpenSettingsClick = {
-                    // TODO(后续阶段)：打开设置页（主题切换等）
+                    // TODO(后续阶段)：打开设置页
                 },
                 onFileClick = { item ->
                     scope.launch { drawerState.close() }
@@ -199,7 +296,6 @@ fun EditorScreen(modifier: Modifier = Modifier) {
         },
     ) {
         Scaffold(
-            // imePadding：键盘弹出时把编辑区顶上去，底部状态栏不会被挡住
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding(),
@@ -211,15 +307,18 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onSaveClick = { saveFile() },
                     onFindClick = {
-                        // 占位：后续阶段实现查找
+                        // 占位：下一阶段实现查找替换
                     },
-                    onMoreClick = {
-                        // 占位：后续阶段实现更多菜单
-                    },
+                    onSwitchEncoding = { showEncodingSheet = true },
+                    onSwitchLineEnding = { showLineEndingSheet = true },
                 )
             },
             bottomBar = {
-                EditorStatusBar(isModified = isModified)
+                EditorStatusBar(
+                    isModified = isModified,
+                    encoding = textFormat.encoding.displayName,
+                    lineEnding = textFormat.lineEnding.displayName,
+                )
             },
             snackbarHost = {
                 SnackbarHost(snackbarHostState)
@@ -258,7 +357,65 @@ fun EditorScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    // ---------------- 未保存提醒 ----------------
+    // ---------------- 切换编码 ----------------
+    if (showEncodingSheet) {
+        ModalBottomSheet(onDismissRequest = { showEncodingSheet = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.sheet_title_encoding),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
+                )
+                HorizontalDivider()
+                TextEncoding.values().forEach { encoding ->
+                    val label = encoding.displayName +
+                        if (encoding == textFormat.encoding) currentSuffix else ""
+                    ActionSheetRow(
+                        text = label,
+                        onClick = {
+                            showEncodingSheet = false
+                            switchEncoding(encoding)
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    // ---------------- 切换换行符 ----------------
+    if (showLineEndingSheet) {
+        ModalBottomSheet(onDismissRequest = { showLineEndingSheet = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.sheet_title_line_ending),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
+                )
+                HorizontalDivider()
+                LineEnding.values().forEach { lineEnding ->
+                    val label = lineEnding.displayName +
+                        if (lineEnding == textFormat.lineEnding) currentSuffix else ""
+                    ActionSheetRow(
+                        text = label,
+                        onClick = {
+                            showLineEndingSheet = false
+                            switchLineEnding(lineEnding)
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    // ---------------- 切换文件：未保存提示 ----------------
     pendingOpenPath?.let { path ->
         AlertDialog(
             onDismissRequest = { pendingOpenPath = null },
@@ -278,10 +435,74 @@ fun EditorScreen(modifier: Modifier = Modifier) {
                 TextButton(
                     onClick = {
                         pendingOpenPath = null
+                        val currentPath = openFilePath
+                        if (currentPath != null) {
+                            scope.launch { app.draftStore.delete(currentPath) }
+                        }
                         loadFile(path)
                     },
                 ) {
                     Text(text = stringResource(R.string.action_discard))
+                }
+            },
+        )
+    }
+
+    // ---------------- 退出：未保存提示 ----------------
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text(text = stringResource(R.string.dialog_exit_title)) },
+            text = { Text(text = stringResource(R.string.dialog_exit_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showExitDialog = false
+                        saveAndExit()
+                    },
+                ) {
+                    Text(text = stringResource(R.string.action_save))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showExitDialog = false
+                        discardAndExit()
+                    },
+                ) {
+                    Text(text = stringResource(R.string.action_exit_without_saving))
+                }
+            },
+        )
+    }
+
+    // ---------------- 发现草稿：要不要恢复 ----------------
+    pendingDraft?.let { prompt ->
+        AlertDialog(
+            onDismissRequest = { pendingDraft = null },
+            title = { Text(text = stringResource(R.string.dialog_draft_title)) },
+            text = { Text(text = stringResource(R.string.dialog_draft_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDraft = null
+                        editorText = prompt.content
+                        showMessage(msgDraftRestored)
+                    },
+                ) {
+                    Text(text = stringResource(R.string.action_restore_draft))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        pendingDraft = null
+                        scope.launch { app.draftStore.delete(prompt.path) }
+                        showMessage(msgDraftDiscarded)
+                    },
+                ) {
+                    Text(text = stringResource(R.string.action_discard_draft))
                 }
             },
         )

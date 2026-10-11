@@ -1,6 +1,10 @@
 package com.example.plaintexteditor.data.repository
 
 import com.example.plaintexteditor.data.model.FileItem
+import com.example.plaintexteditor.data.text.TextContent
+import com.example.plaintexteditor.data.text.TextEncoding
+import com.example.plaintexteditor.data.text.TextFormat
+import com.example.plaintexteditor.data.text.TextFormats
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -188,6 +192,40 @@ class FileRepository(
         if (file.isDirectory) throw IOException("这是文件夹，不能写文字进去：${display(path)}")
         file.parentFile?.mkdirs()
         file.writeText(content)
+    }
+
+    /**
+     * 读文本文件，并且顺便判断它是什么编码、什么换行符。
+     *
+     * @param overrideEncoding 用户手动指定的编码（传 null 表示“按文件自己的 BOM 判断，没有就 UTF-8”）
+     */
+    suspend fun readTextFile(
+        path: String,
+        overrideEncoding: TextEncoding? = null,
+    ): Result<TextContent> = io {
+        val file = resolveExisting(path)
+        if (file.isDirectory) throw IOException("这是文件夹，不是文件：${display(path)}")
+        val bytes = file.readBytes()
+        val detected = TextFormats.detectFormat(bytes)
+        val format = if (overrideEncoding == null) {
+            detected
+        } else {
+            TextFormats.withEncodingOverride(detected, overrideEncoding)
+        }
+        TextFormats.decode(bytes, format)
+    }
+
+    /** 按指定编码和换行符把内容写回文件（“打开时什么样，保存后还是什么样”）。 */
+    suspend fun writeTextFile(
+        path: String,
+        content: String,
+        format: TextFormat,
+    ): Result<Unit> = io {
+        requireNotRoot(path)
+        val file = resolve(path)
+        if (file.isDirectory) throw IOException("这是文件夹，不能写文字进去：${display(path)}")
+        file.parentFile?.mkdirs()
+        file.writeBytes(TextFormats.encode(content, format))
     }
 
     // ======================================================================

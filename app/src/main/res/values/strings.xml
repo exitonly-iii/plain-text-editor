@@ -22,8 +22,6 @@
     <string name="editor_empty_placeholder">未打开文件</string>
 
     <!-- 底部状态栏（第一阶段都是占位文字） -->
-    <string name="status_encoding">UTF-8</string>
-    <string name="status_line_ending">LF</string>
     <string name="status_line_count">行数 --</string>
     <string name="status_cursor_position">行号 --</string>
 
@@ -82,4 +80,21 @@
     <string name="message_saved">已保存</string>
     <string name="status_modified">已修改</string>
     <string name="editor_loading_file">正在打开文件…</string>
+
+    <!-- 编码 / 换行符 / 草稿 / 退出（第六阶段） -->
+    <string name="action_switch_encoding">切换编码…</string>
+    <string name="action_switch_line_ending">切换换行符…</string>
+    <string name="sheet_title_encoding">选择文件编码</string>
+    <string name="sheet_title_line_ending">选择换行符</string>
+    <string name="label_current">（当前）</string>
+    <string name="dialog_draft_title">发现未保存的草稿</string>
+    <string name="dialog_draft_message">上次编辑这个文件时有没保存的内容，要恢复吗？</string>
+    <string name="action_restore_draft">恢复</string>
+    <string name="action_discard_draft">丢弃</string>
+    <string name="message_draft_restored">已恢复未保存的内容（记得保存）</string>
+    <string name="message_draft_discarded">已丢弃草稿</string>
+    <string name="message_save_before_switch_encoding">请先保存或放弃当前修改，再切换编码</string>
+    <string name="dialog_exit_title">要退出吗</string>
+    <string name="dialog_exit_message">当前文件的修改还没有保存。要先保存吗？</string>
+    <string name="action_exit_without_saving">放弃并退出</string>
 </resources>

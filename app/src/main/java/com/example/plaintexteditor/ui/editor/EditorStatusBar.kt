@@ -22,14 +22,18 @@ import com.example.plaintexteditor.R
 
 /**
  * 底部状态栏。
- * 左边显示“已修改”（有未保存修改时）+ 编码和换行符，右边显示行数和行号占位。
+ * 左边显示“已修改”（有未保存修改时）+ 编码和换行符（真实值），右边显示行数和行号占位。
  *
  * @param isModified 当前文件是否有未保存的修改
+ * @param encoding 当前编码的显示名，例如 "UTF-8"
+ * @param lineEnding 当前换行符的显示名，例如 "LF"
  */
 @Composable
 fun EditorStatusBar(
     modifier: Modifier = Modifier,
     isModified: Boolean = false,
+    encoding: String,
+    lineEnding: String,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -52,9 +56,9 @@ fun EditorStatusBar(
                 )
                 StatusBarSeparator()
             }
-            StatusBarLabel(text = stringResource(R.string.status_encoding))
+            StatusBarLabel(text = encoding)
             StatusBarSeparator()
-            StatusBarLabel(text = stringResource(R.string.status_line_ending))
+            StatusBarLabel(text = lineEnding)
 
             // 把后面的内容挤到右边
             Spacer(modifier = Modifier.weight(1f))

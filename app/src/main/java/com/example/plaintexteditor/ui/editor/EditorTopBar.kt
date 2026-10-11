@@ -1,16 +1,23 @@
 package com.example.plaintexteditor.ui.editor
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -24,6 +31,8 @@ import com.example.plaintexteditor.R
  * @param title 中间显示的文字（文件名或应用名）
  * @param isModified 当前文件是否有未保存的修改
  * @param canSave 保存按钮是否可以点（没打开文件、或没有改动时是灰的）
+ * @param onSwitchEncoding 点“更多 → 切换编码…”时调用
+ * @param onSwitchLineEnding 点“更多 → 切换换行符…”时调用
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,9 +43,12 @@ fun EditorTopBar(
     onMenuClick: () -> Unit,
     onSaveClick: () -> Unit,
     onFindClick: () -> Unit,
-    onMoreClick: () -> Unit,
+    onSwitchEncoding: () -> Unit,
+    onSwitchLineEnding: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var moreMenuOpen by remember { mutableStateOf(false) }
+
     CenterAlignedTopAppBar(
         modifier = modifier,
         title = {
@@ -67,11 +79,33 @@ fun EditorTopBar(
                     contentDescription = stringResource(R.string.action_find),
                 )
             }
-            IconButton(onClick = onMoreClick) {
-                Icon(
-                    imageVector = Icons.Filled.MoreVert,
-                    contentDescription = stringResource(R.string.action_more),
-                )
+            // “更多”菜单：目前放编码 / 换行符切换
+            Box {
+                IconButton(onClick = { moreMenuOpen = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = stringResource(R.string.action_more),
+                    )
+                }
+                DropdownMenu(
+                    expanded = moreMenuOpen,
+                    onDismissRequest = { moreMenuOpen = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.action_switch_encoding)) },
+                        onClick = {
+                            moreMenuOpen = false
+                            onSwitchEncoding()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.action_switch_line_ending)) },
+                        onClick = {
+                            moreMenuOpen = false
+                            onSwitchLineEnding()
+                        },
+                    )
+                }
             }
         },
     )

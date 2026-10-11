@@ -2,8 +2,10 @@ package com.example.plaintexteditor
 
 import android.app.Application
 import android.content.Context
+import com.example.plaintexteditor.data.draft.DraftStore
 import com.example.plaintexteditor.data.repository.FileRepository
 import com.example.plaintexteditor.data.workspace.WorkspaceStore
+import java.io.File
 
 /**
  * 应用入口（在 AndroidManifest.xml 里用 android:name=".PlainTextEditorApp" 挂上）。
@@ -25,6 +27,11 @@ class PlainTextEditorApp : Application() {
     /** 工作区存储：记住“我关心哪些目录/文件” */
     val workspaceStore: WorkspaceStore by lazy {
         WorkspaceStore(context = this)
+    }
+
+    /** 草稿存储：把“还没保存的内容”临时写进私有缓存目录的 drafts 子里 */
+    val draftStore: DraftStore by lazy {
+        DraftStore(draftDirectory = File(cacheDir, "drafts"))
     }
 
     companion object {
