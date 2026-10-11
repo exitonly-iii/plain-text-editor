@@ -26,4 +26,45 @@
     <string name="status_line_ending">LF</string>
     <string name="status_line_count">行数 --</string>
     <string name="status_cursor_position">行号 --</string>
+
+    <!-- 文件浏览器 -->
+    <string name="action_close">关闭</string>
+    <string name="browser_title">私有目录</string>
+    <string name="browser_up">上一级</string>
+    <string name="browser_empty">这个文件夹是空的</string>
+    <string name="browser_retry">重试</string>
+    <string name="action_new">新建</string>
+    <string name="action_new_folder">新建文件夹</string>
+    <string name="action_new_file">新建文本文件</string>
+    <string name="action_rename">重命名</string>
+    <string name="action_delete">删除</string>
+    <string name="action_copy">复制到…</string>
+    <string name="action_move">移动到…</string>
+    <string name="action_add_to_workspace">添加到工作区</string>
+
+    <!-- 文件浏览器：对话框 -->
+    <string name="dialog_name_label">名称</string>
+    <string name="dialog_confirm">确定</string>
+    <string name="dialog_cancel">取消</string>
+    <string name="dialog_delete_title">删除</string>
+    <string name="dialog_delete_message">确定要删除“%1$s”吗？文件夹里的内容会一起被删除，无法恢复。</string>
+
+    <!-- 文件浏览器：选择目标文件夹 -->
+    <string name="picker_title_copy">复制到…</string>
+    <string name="picker_title_move">移动到…</string>
+    <string name="picker_confirm_copy">复制到这里</string>
+    <string name="picker_confirm_move">移动到这里</string>
+    <string name="picker_here">当前选择：%1$s</string>
+
+    <!-- 文件浏览器：操作结果提示 -->
+    <string name="message_created">已创建</string>
+    <string name="message_renamed">已重命名</string>
+    <string name="message_deleted">已删除</string>
+    <string name="message_copied">已复制</string>
+    <string name="message_moved">已移动</string>
+    <string name="message_added_to_workspace">已添加到工作区</string>
+    <string name="message_already_in_workspace">这个已经在工作区里了</string>
+    <string name="message_operation_failed">操作失败：%1$s</string>
+    <string name="error_unknown">未知错误</string>
+    <string name="workspace_count_hint">已添加 %1$d 个工作区（列表视图将在下一阶段完成）</string>
 </resources>

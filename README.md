@@ -53,6 +53,12 @@ plain-text-editor/                        ← 项目根目录（名字可以自�
             │   │       ├── FileBrowserState.kt           ← “文件列表”状态盒子
             │   │       └── WorkspaceState.kt             ← “工作区列表”状态盒子
             │   └── ui/
+            │       ├── browser/                          ← 文件浏览器页面（第三阶段新增）
+            │       │   ├── FileBrowserScreen.kt          ← 页面主体（面包屑 + 列表 + 弹窗）
+            │       │   ├── FileEntryRow.kt               ← 列表里的一行
+            │       │   ├── FileActionSheet.kt            ← 底部操作菜单 / 新建 / 选择目标文件夹
+            │       │   ├── FileBrowserDialogs.kt         ← 输入名字、删除确认
+            │       │   └── FileBrowserFormatters.kt      ← 大小 / 时间 / 路径的显示格式
             │       ├── theme/
             │       │   ├── Color.kt                      ← 浅色/深色配色
             │       │   ├── Theme.kt                      ← 主题（含浅色/深色/跟随系统）
@@ -66,7 +72,9 @@ plain-text-editor/                        ← 项目根目录（名字可以自�
             │           └── PlainTextEditor.kt            ← 编辑区（EditText 封装）
             └── res/
                 ├── drawable/
-                │   └── ic_launcher_foreground.xml        ← 图标的图案（矢量图）
+                │   ├── ic_file.xml                       ← 文件图标（矢量图）
+                │   ├── ic_folder.xml                     ← 文件夹图标（矢量图）
+                │   └── ic_launcher_foreground.xml        ← 启动图标的图案（矢量图）
                 ├── mipmap-anydpi-v26/
                 │   ├── ic_launcher.xml                   ← 图标
                 │   └── ic_launcher_round.xml             ← 圆形图标
@@ -266,11 +274,63 @@ v0.1.x 用的是 GitHub Actions 每次临时生成的调试密钥，所以那几
 
 ---
 
-## 七、第二阶段可以接的功能
+## 七、文件系统数据层（第二阶段已完成）
 
-代码里已经留好了这些“接口位”，接起来会很自然：
+数据层没有任何界面代码，只负责“文件怎么读写、工作区怎么记住”。
 
-- `PlainTextEditor` 已经是可用的编辑控件，把文件内容传进 `text` 就会显示、编辑
-- `EditorScreen` 里的 `isFileOpen` 改成 `true` 就从占位切到真正的编辑区
-- 私有目录读写用 `context.filesDir`，**不需要任何权限**
-- `ThemeMode` 已经支持浅色/深色/跟随系统，只差在设置页里做一个切换开关
+### 路径约定
+所有 path 都是**相对应用私有根目录**的相对路径，`""` 表示根目录本身：
+
+| 例子 | 含义 |
+| --- | --- |
+| `""` | 私有根目录（`filesDir`） |
+| `"notes"` | 根目录下的 notes 文件夹 |
+| `"notes/日记.txt"` | notes 文件夹里的 日记.txt |
+
+为什么要用相对路径：应用被“分身”、数据目录被系统换位置时，绝对路径会失效，相对路径不会。
+需要绝对路径时用 `FileRepository.rootAbsolutePath`（只用于显示，不要保存）。
+
+### 三个仓库 / 状态对象
+
+| 文件 | 作用 | 用法 |
+| --- | --- | --- |
+| `FileRepository` | 所有文件读写 | 每个函数都是 `suspend`，返回 `Result`；成功 `getOrNull()`，失败 `exceptionOrNull()?.message` |
+| `WorkspaceStore` | 工作区列表 | `workspaces` 是 `Flow`，界面 `collect` 它就会自动刷新 |
+| `FileBrowserState` / `WorkspaceState` | 状态盒子 | 界面拿它们来存“此刻的样子” |
+
+`FileRepository` 提供的操作：`list` 列目录、`createDirectory`、`createTextFile`、`rename`、`delete`、
+`copy`、`move`、`readText`、`writeText`、`getItem`、`exists`。
+全部在后台线程执行，且都被限制在私有目录内（`../` 之类的路径会被拒绝）。
+
+---
+
+## 八、文件浏览器页面（第三阶段已完成）
+
+入口：主界面左上角菜单 → 侧边栏底部「浏览私有目录」→ 全屏打开文件浏览器。
+
+能做到的事：
+
+- 从私有目录根开始，一层一层进入文件夹；顶部面包屑（私有目录 › notes › 2026）点哪一层就跳到哪一层
+- 文件夹排在前面、文件排在后面，文件显示大小和修改时间
+- 顶部「+」→ 新建文件夹 / 新建文本文件
+- 长按某一行（或点它右边的「⋮」）→ 添加到工作区 / 重命名 / 复制到… / 移动到… / 删除
+- 复制和移动会弹出“选择目标文件夹”的面板；遇到同名项目自动改名成「名字 (2)」，不会覆盖任何东西
+- 删除会二次确认；操作结果用底部提示条告知
+- 系统返回键：在子目录里是返回上一级，在根目录是关闭浏览器
+
+相关文件：
+
+| 文件 | 作用 |
+| --- | --- |
+| `ui/browser/FileBrowserScreen.kt` | 页面主体：顶部栏、面包屑、列表、各种弹窗的组装 |
+| `ui/browser/FileEntryRow.kt` | 列表里的一行（图标 / 名字 / 大小时间 / 更多按钮） |
+| `ui/browser/FileActionSheet.kt` | 底部操作菜单、新建菜单、选择目标文件夹 |
+| `ui/browser/FileBrowserDialogs.kt` | 输入名字的弹窗、删除确认弹窗 |
+| `ui/browser/FileBrowserFormatters.kt` | 大小 / 时间 / 路径的显示格式 |
+| `res/drawable/ic_folder.xml`、`ic_file.xml` | 文件夹和文件的图标（矢量图，不需要图片文件） |
+
+### 后续阶段要做的
+
+- 侧边栏工作区列表（本阶段只在侧边栏显示“已添加 N 个工作区”）
+- 编辑区接文件：`PlainTextEditor` 已经是可用控件，把 `readText` 的内容传进去即可
+- 设置页里的浅色/深色/跟随系统开关（`ThemeMode` 已支持三种）
