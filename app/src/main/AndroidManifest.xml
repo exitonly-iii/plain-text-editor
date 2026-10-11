@@ -3,8 +3,9 @@
   app/src/main/AndroidManifest.xml
   应用的“说明书”：声明应用名、图标、入口界面。
 
-  注意：第一阶段不申请任何权限，所以这里没有 <uses-permission> 标签。
-  应用只在自己的私有目录里读写文件（卸载应用时会一起删除，其它应用无法访问）。
+  本应用不申请任何权限：这里没有也不需要任何 uses-permission。
+  文件只读写应用私有目录（卸载时一并删除，其它应用无法访问）；
+  导入/导出通过系统文件选择器按次授权，分享通过 FileProvider。
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 

@@ -33,7 +33,7 @@ enum class ThemeMode {
  *
  * @param themeMode 浅色 / 深色 / 跟随系统
  * @param dynamicColor 是否使用“动态取色”（Android 12+ 会跟壁纸配色）。
- *                     默认关闭，这样在荣耀手机上也能保持稳定的 Google 系配色。
+ *                     默认关闭，这样在所有设备上都能保持一致、稳定的配色。
  */
 @Composable
 fun PlainTextEditorTheme(

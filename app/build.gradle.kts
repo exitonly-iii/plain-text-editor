@@ -29,7 +29,7 @@ android {
         // 目标版本：Android 16（API 36）
         targetSdk = 36
 
-        // 应用版本号（每次发新版：versionCode 加 1，versionName 可以写 0.2.0）
+        // 应用版本号（发新版时 versionCode 加 1，versionName 同步更新）
         versionCode = 10
         versionName = "1.0.0"
     }
