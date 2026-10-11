@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 及以下使用的备份规则。
+  这里选择“不备份任何内容”：纯文本这类内容留在手机本地更安全。
+-->
+<full-backup-content>
+    <exclude
+        domain="root"
+        path="." />
+</full-backup-content>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  app/src/main/res/values/colors.xml
+  只放“XML 主题”和启动图标需要的颜色。
+  界面真正的配色在 Kotlin 代码里：ui/theme/Color.kt
+-->
+<resources>
+    <!-- 启动图标背景色（Google 蓝） -->
+    <color name="ic_launcher_background">#FF1A73E8</color>
+
+    <!-- 窗口背景色（浅色模式） -->
+    <color name="app_window_background">#FFFDFDFD</color>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  app/src/main/res/values-night/colors.xml
+  深色模式下的颜色覆盖。文件名里的 “night” 表示系统处于深色模式时才生效。
+-->
+<resources>
+    <!-- 窗口背景色（深色模式） -->
+    <color name="app_window_background">#FF101418</color>
+</resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  app/src/main/res/values/themes.xml
+  这个 XML 主题只负责“窗口本身”的外观：启动瞬间的背景色、去掉系统自带的标题栏。
+  界面配色由 Compose 的 Material 3 主题负责：ui/theme/Theme.kt
+  深色模式的版本在 res/values-night/themes.xml
+-->
+<resources>
+    <style name="Theme.PlainTextEditor" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/app_window_background</item>
+    </style>
+</resources>

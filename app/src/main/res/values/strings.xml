@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  app/src/main/res/values/strings.xml
+  界面上所有看得见的文字都放在这里。想改文案，只改这个文件即可。
+-->
+<resources>
+    <string name="app_name">纯文本编辑器</string>
+
+    <!-- 顶部栏 -->
+    <string name="action_open_drawer">打开工作区侧边栏</string>
+    <string name="action_save">保存</string>
+    <string name="action_find">查找</string>
+    <string name="action_more">更多</string>
+    <string name="action_settings">设置</string>
+
+    <!-- 侧边栏：工作区 -->
+    <string name="workspace_title">工作区</string>
+    <string name="workspace_empty_hint">暂无工作区，点击下方浏览私有目录添加</string>
+    <string name="workspace_browse_private_dir">浏览私有目录</string>
+
+    <!-- 编辑区 -->
+    <string name="editor_empty_placeholder">未打开文件</string>
+
+    <!-- 底部状态栏（第一阶段都是占位文字） -->
+    <string name="status_encoding">UTF-8</string>
+    <string name="status_line_ending">LF</string>
+    <string name="status_line_count">行数 --</string>
+    <string name="status_cursor_position">行号 --</string>
+</resources>

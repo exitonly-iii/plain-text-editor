@@ -1,0 +1,32 @@
+# ============================================================================
+# .gitignore
+# 告诉 Git 哪些文件不要上传（构建产物、本机配置等）。
+# ============================================================================
+
+# Gradle 构建产物
+.gradle/
+build/
+
+# 本机 Android SDK 路径（每台电脑都不一样，绝对不要上传）
+local.properties
+
+# Android Studio / IntelliJ 的工程文件
+.idea/
+*.iml
+.kotlin/
+captures/
+
+# 构建出来的安装包（每次构建都会重新生成，不需要上传）
+*.apk
+*.aab
+*.ap_
+*.dex
+output.json
+
+# 日志与系统文件
+*.log
+.DS_Store
+Thumbs.db
+
+# 将来如果生成了 gradle-wrapper.jar，可以允许它被提交（Gradle 官方推荐提交）
+!gradle/wrapper/gradle-wrapper.jar

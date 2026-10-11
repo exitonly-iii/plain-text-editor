@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 8.0（API 26）以上的自适应图标：由“背景色 + 前景图”两部分组成。
+  因为本项目 minSdk = 26，所以只需要这一份 XML，不需要任何 PNG 图片。
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

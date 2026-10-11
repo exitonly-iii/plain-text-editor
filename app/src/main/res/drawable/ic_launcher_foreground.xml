@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  启动图标的前景层：一张“文档 + 文字行”的矢量图。
+  矢量图（vector）纯文本描述，不需要任何图片文件。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 纸张 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M40,28H62L78,44V76C78,78.2 76.2,80 74,80H40C37.8,80 36,78.2 36,76V32C36,29.8 37.8,28 40,28Z" />
+
+    <!-- 折角 -->
+    <path
+        android:fillColor="#FFC7DCFB"
+        android:pathData="M62,28L78,44H64C62.9,44 62,43.1 62,42Z" />
+
+    <!-- 文字行 -->
+    <path
+        android:strokeColor="#FF1A73E8"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M45,52H69" />
+    <path
+        android:strokeColor="#FF1A73E8"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M45,60H69" />
+    <path
+        android:strokeColor="#FF1A73E8"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M45,68H60" />
+
+</vector>
