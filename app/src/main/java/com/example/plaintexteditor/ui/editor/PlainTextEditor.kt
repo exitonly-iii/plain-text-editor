@@ -1,6 +1,9 @@
 package com.example.plaintexteditor.ui.editor
 
 import android.content.Context
+import android.view.ActionMode
+import android.view.Menu
+import android.view.MenuItem
 import android.graphics.Color as AndroidColor
 import android.graphics.Typeface
 import android.text.Editable
@@ -32,6 +35,26 @@ private class CursorTrackingEditText(context: Context) : EditText(context) {
 }
 
 /**
+ * 清掉长按浮动菜单里系统 / 输入法附加的项：
+ * 常见的是「AI 帮写」（textAssist）与「分享」（shareText），只留全选 / 剪切 / 复制 / 粘贴。
+ */
+private fun stripExtraSelectionItems(menu: Menu) {
+    menu.removeItem(android.R.id.textAssist)
+    menu.removeItem(android.R.id.shareText)
+
+    val unwanted = listOf("AI", "帮写", "分享")
+    val extraIds = ArrayList<Int>()
+    for (index in 0 until menu.size()) {
+        val item = menu.getItem(index)
+        val title = item.title?.toString().orEmpty()
+        if (unwanted.any { title.contains(it, ignoreCase = true) }) {
+            extraIds.add(item.itemId)
+        }
+    }
+    extraIds.forEach { menu.removeItem(it) }
+}
+
+/**
  * 一次“请把光标 / 选区放到这里”的请求。
  * token 每次变化才会被应用一次，所以不会和用户自己的光标打架。
  */
@@ -56,6 +79,7 @@ data class SelectionRequest(
  * @param fontSizeSp 字号（sp），来自设置页
  */
 @Composable
+@Suppress("DEPRECATION")
 fun PlainTextEditor(
     text: String,
     onTextChange: (String) -> Unit,
@@ -100,6 +124,38 @@ fun PlainTextEditor(
                 setLineSpacing(0f, 1.2f)
                 setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
                 setTextColor(currentTextColor)
+
+                // 长按选中的浮动菜单：去掉系统/输入法塞进来的「AI 帮写」与「分享」，
+                // 只保留全选、剪切、复制、粘贴这些基础操作
+                customSelectionActionModeCallback = object : ActionMode.Callback {
+                    override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+                        menu?.let { stripExtraSelectionItems(it) }
+                        return true
+                    }
+
+                    override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+                        menu?.let { stripExtraSelectionItems(it) }
+                        return true
+                    }
+
+                    override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean = false
+
+                    override fun onDestroyActionMode(mode: ActionMode?) = Unit
+                }
+
+                // 底部留出约 0.9 屏的空白：内容满屏时也能继续往上拉，
+                // 光标可以停在上方，而不是被按在最底部（不产生新行）
+                addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                    val footer = (view.height * 0.9f).toInt()
+                    if (view.paddingBottom != footer) {
+                        view.setPadding(
+                            view.paddingLeft,
+                            view.paddingTop,
+                            view.paddingRight,
+                            footer,
+                        )
+                    }
+                }
 
                 addTextChangedListener(object : TextWatcher {
                     override fun beforeTextChanged(

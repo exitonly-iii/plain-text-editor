@@ -16,9 +16,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -64,6 +66,9 @@ import kotlinx.coroutines.launch
  * @param onFileClick 点文件时调用（把路径交给编辑区）
  * @param onMessage 显示一条提示（由外面的 Snackbar 负责显示）
  * @param onTreeChanged 做完重命名/删除这类操作后调用，用来触发刷新
+ * @param dirtyPath 当前有未保存修改的文件路径（在它所在的行后面显示 *）
+ * @param onRemoveWorkspace 请求把某个工作区移出（由外面决定要不要先提示保存）
+ * @param onPathRenamed 某个文件/文件夹改完名后通知外面（用来更新正在编辑的路径）
  */
 @Composable
 fun WorkspaceListContent(
@@ -74,6 +79,9 @@ fun WorkspaceListContent(
     onFileClick: (FileItem) -> Unit,
     onMessage: (String) -> Unit,
     onTreeChanged: () -> Unit,
+    dirtyPath: String?,
+    onRemoveWorkspace: (FileItem) -> Unit,
+    onPathRenamed: (String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -132,6 +140,7 @@ fun WorkspaceListContent(
                     },
                     onFileClick = onFileClick,
                     onLongClick = { actionTarget = it },
+                    dirtyPath = dirtyPath,
                 )
             }
         }
@@ -147,12 +156,8 @@ fun WorkspaceListContent(
             onDismiss = { actionTarget = null },
             onRemoveFromWorkspace = {
                 actionTarget = null
-                scope.launch {
-                    workspaceStore.remove(item.path).fold(
-                        onSuccess = { onMessage(msgRemoved) },
-                        onFailure = { onMessage(failureText(it.message)) },
-                    )
-                }
+                // 交给外面处理：如果这个工作区里有未保存的修改，外面会先问一句
+                onRemoveWorkspace(item)
             },
             onRename = {
                 actionTarget = null
@@ -176,7 +181,20 @@ fun WorkspaceListContent(
                 renameTarget = null
                 scope.launch {
                     repository.rename(item.path, newName).fold(
-                        onSuccess = {
+                        onSuccess = { renamed ->
+                            // 改的是工作区根目录时，工作区记录里的路径也要跟着改
+                            if (workspaces.any { it.path == item.path }) {
+                                workspaceStore.remove(item.path)
+                                workspaceStore.add(
+                                    renamed.path,
+                                    if (renamed.isDirectory) {
+                                        WorkspaceType.DIRECTORY
+                                    } else {
+                                        WorkspaceType.FILE
+                                    },
+                                )
+                            }
+                            onPathRenamed(item.path, renamed.path)
                             onMessage(msgRenamed)
                             onTreeChanged()
                         },
@@ -222,14 +240,20 @@ private fun WorkspaceNode(
     onToggleExpand: (String) -> Unit,
     onFileClick: (FileItem) -> Unit,
     onLongClick: (FileItem) -> Unit,
+    dirtyPath: String?,
 ) {
     val expanded = item.isDirectory && item.path in expandedPaths
+    val isDirty = dirtyPath != null && (
+        dirtyPath == item.path ||
+            (item.isDirectory && dirtyPath.startsWith(item.path + "/"))
+        )
 
     TreeRow(
         item = item,
         depth = depth,
         emphasized = depth == 0,
         expanded = if (item.isDirectory) expanded else null,
+        isDirty = isDirty,
         onClick = {
             if (item.isDirectory) {
                 onToggleExpand(item.path)
@@ -238,6 +262,7 @@ private fun WorkspaceNode(
             }
         },
         onLongClick = { onLongClick(item) },
+        onMenuClick = { onLongClick(item) },
     )
 
     if (!expanded) return
@@ -289,6 +314,7 @@ private fun WorkspaceNode(
                     onToggleExpand = onToggleExpand,
                     onFileClick = onFileClick,
                     onLongClick = onLongClick,
+                    dirtyPath = dirtyPath,
                 )
             }
         }
@@ -303,8 +329,10 @@ private fun TreeRow(
     depth: Int,
     emphasized: Boolean,
     expanded: Boolean?,
+    isDirty: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onMenuClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -349,12 +377,27 @@ private fun TreeRow(
         Spacer(modifier = Modifier.width(10.dp))
 
         Text(
-            text = item.name,
+            text = if (isDirty) item.name + " *" else item.name,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (emphasized) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isDirty) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
+
+        // 右端竖三点：和长按弹出同一个菜单
+        IconButton(onClick = onMenuClick) {
+            Icon(
+                imageVector = Icons.Filled.MoreVert,
+                contentDescription = stringResource(R.string.action_more),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -424,7 +467,8 @@ private fun WorkspaceItemActionSheet(
 
 /** 把工作区条目变成一个普通的文件/文件夹信息，好和树里的其它节点统一处理。 */
 private fun WorkspaceItem.asFileItem(): FileItem = FileItem(
-    name = name,
+    // 名字按路径现算：工作区里的文件/文件夹改名后，这里显示的名字会立刻跟上
+    name = path.substringAfterLast('/').ifEmpty { WorkspaceItem.ROOT_DISPLAY_NAME },
     path = path,
     isDirectory = type == WorkspaceType.DIRECTORY,
     size = 0L,

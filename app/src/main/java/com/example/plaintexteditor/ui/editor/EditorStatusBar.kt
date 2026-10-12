@@ -31,6 +31,7 @@ import com.example.plaintexteditor.R
  * @param currentLine 光标所在行（还没算出来时传 null）
  * @param showCurrentLine 是否显示当前行号（设置里的开关）
  * @param readOnly 是否处于只读模式（大文件）
+ * @param characterCount 全文字符数（大文件模式传 null）
  */
 @Composable
 fun EditorStatusBar(
@@ -42,6 +43,7 @@ fun EditorStatusBar(
     currentLine: Int? = null,
     showCurrentLine: Boolean = true,
     readOnly: Boolean = false,
+    characterCount: Int? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -78,6 +80,12 @@ fun EditorStatusBar(
             // 把后面的内容挤到右边
             Spacer(modifier = Modifier.weight(1f))
 
+            StatusBarLabel(
+                text = characterCount?.let {
+                    stringResource(R.string.status_character_count_format, it)
+                } ?: "",
+            )
+            if (characterCount != null) StatusBarSeparator()
             StatusBarLabel(
                 text = totalLines?.let {
                     stringResource(R.string.status_line_count_format, it)

@@ -1,6 +1,9 @@
 package com.example.plaintexteditor.ui.editor
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Menu
@@ -12,6 +15,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -22,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.example.plaintexteditor.R
 
 /**
@@ -61,13 +66,25 @@ fun EditorTopBar(
     var moreMenuOpen by remember { mutableStateOf(false) }
 
     CenterAlignedTopAppBar(
-        modifier = modifier,
+        // 比默认略矮一点，减少空白
+        modifier = modifier.height(56.dp),
         title = {
-            Text(
-                text = if (isModified) "$title *" else title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // 文件名单独占一列并允许省略，星号固定跟在后面 —— 名字再长也不会把星号挤掉
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (isModified) {
+                    Text(
+                        text = " *",
+                        maxLines = 1,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
         },
         navigationIcon = {
             IconButton(onClick = onMenuClick) {

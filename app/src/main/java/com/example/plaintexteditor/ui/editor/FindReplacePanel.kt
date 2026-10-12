@@ -1,6 +1,5 @@
 package com.example.plaintexteditor.ui.editor
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,16 +7,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,11 +24,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,15 +42,17 @@ import com.example.plaintexteditor.R
 import kotlinx.coroutines.delay
 
 /**
- * 编辑区底部的「查找替换」面板。
+ * 编辑区底部的「查找替换」面板（布局仿 VS Code 做了压缩）：
  *
- * 放在编辑区下方、状态栏上方；因为整个页面用了 imePadding，
- * 所以键盘弹出来时它会跟着被顶上去，不会被挡住。
+ * - 第一行：折叠箭头 + 查找框 + 上一个 / 下一个 / 关闭
+ * - 第二行：Aa / ab / .* / ¶ 四个小开关 + 右侧匹配计数
+ * - 替换框默认收起，点第一行开头的箭头才展开
  *
- * 所有按钮都是 Material 3 的标准控件，触摸目标都在 48dp 以上。
+ * 背景与编辑区同为 surface（浅色模式下就是白色），提示语颜色更淡。
+ * 触摸目标仍不小于 48dp。
  *
  * @param statusMessage 已经拼好的提示（正则写错 / 匹配过多），没有时为 null
- * @param readOnly 只读模式（大文件）下不允许替换 —— 本阶段先留好接口，一直传 false
+ * @param readOnly 只读模式（大文件）下不允许替换
  */
 @Composable
 fun FindReplacePanel(
@@ -77,6 +81,7 @@ fun FindReplacePanel(
     modifier: Modifier = Modifier,
 ) {
     val focusRequester = remember { FocusRequester() }
+    var replaceExpanded by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         // 打开面板就把光标放进查找框，键盘自动弹出
         delay(120)
@@ -92,15 +97,31 @@ fun FindReplacePanel(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = MaterialTheme.colorScheme.surface,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
         ) {
             // ---- 第一行：查找 ----
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { replaceExpanded = !replaceExpanded }) {
+                    Icon(
+                        imageVector = if (replaceExpanded) {
+                            Icons.Filled.KeyboardArrowDown
+                        } else {
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight
+                        },
+                        contentDescription = stringResource(
+                            if (replaceExpanded) {
+                                R.string.action_collapse_replace
+                            } else {
+                                R.string.action_expand_replace
+                            },
+                        ),
+                    )
+                }
                 OutlinedTextField(
                     value = query,
                     onValueChange = onQueryChange,
@@ -108,9 +129,11 @@ fun FindReplacePanel(
                         .weight(1f)
                         .focusRequester(focusRequester),
                     singleLine = true,
-                    placeholder = { Text(text = stringResource(R.string.find_hint)) },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Filled.Search, contentDescription = null)
+                    placeholder = {
+                        Text(
+                            text = stringResource(R.string.find_hint),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        )
                     },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { onNext() }),
@@ -135,28 +158,64 @@ fun FindReplacePanel(
                 }
             }
 
-            // ---- 匹配情况 ----
-            Text(
-                text = counterText,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (statusMessage != null) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
-            )
-
-            // ---- 第二行：替换 ----
+            // ---- 第二行：选项开关 + 匹配情况 ----
             Row(verticalAlignment = Alignment.CenterVertically) {
+                CompactToggle(
+                    label = stringResource(R.string.option_case_short),
+                    description = stringResource(R.string.option_case_sensitive),
+                    selected = caseSensitive,
+                    onClick = { onCaseSensitiveChange(!caseSensitive) },
+                )
+                CompactToggle(
+                    label = stringResource(R.string.option_whole_word_short),
+                    description = stringResource(R.string.option_whole_word),
+                    selected = wholeWord,
+                    onClick = { onWholeWordChange(!wholeWord) },
+                )
+                CompactToggle(
+                    label = stringResource(R.string.option_regex_short),
+                    description = stringResource(R.string.option_regex),
+                    selected = useRegex,
+                    onClick = { onUseRegexChange(!useRegex) },
+                )
+                CompactToggle(
+                    label = stringResource(R.string.option_multiline_short),
+                    description = stringResource(R.string.option_multiline),
+                    selected = multiline && useRegex,
+                    enabled = useRegex,
+                    onClick = { onMultilineChange(!multiline) },
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = counterText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (statusMessage != null) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+            }
+
+            // ---- 替换（默认收起） ----
+            if (replaceExpanded) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = replacement,
                     onValueChange = onReplacementChange,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp),
                     singleLine = true,
-                    placeholder = { Text(text = stringResource(R.string.replace_hint)) },
+                    placeholder = {
+                        Text(
+                            text = stringResource(R.string.replace_hint),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        )
+                    },
                 )
                 TextButton(
                     onClick = onReplace,
@@ -171,6 +230,7 @@ fun FindReplacePanel(
                     Text(text = stringResource(R.string.action_replace_all))
                 }
             }
+            }
 
             if (readOnly) {
                 Text(
@@ -180,41 +240,29 @@ fun FindReplacePanel(
                     modifier = Modifier.padding(start = 4.dp, top = 2.dp),
                 )
             }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // ---- 第三行：选项（窄屏可以横向滑动） ----
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                FilterChip(
-                    selected = useRegex,
-                    onClick = { onUseRegexChange(!useRegex) },
-                    label = { Text(text = stringResource(R.string.option_regex)) },
-                )
-                FilterChip(
-                    selected = caseSensitive,
-                    onClick = { onCaseSensitiveChange(!caseSensitive) },
-                    label = { Text(text = stringResource(R.string.option_case_sensitive)) },
-                )
-                FilterChip(
-                    selected = wholeWord,
-                    onClick = { onWholeWordChange(!wholeWord) },
-                    label = { Text(text = stringResource(R.string.option_whole_word)) },
-                )
-                FilterChip(
-                    // 多行模式只在正则有意义，所以不是正则时禁用
-                    selected = multiline && useRegex,
-                    enabled = useRegex,
-                    onClick = { onMultilineChange(!multiline) },
-                    label = { Text(text = stringResource(R.string.option_multiline)) },
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-            }
         }
+    }
+}
+
+/** 查找选项的小开关（Aa / ab / .* / ¶），选中时变主题色 */
+@Composable
+private fun CompactToggle(
+    label: String,
+    description: String,
+    selected: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick, enabled = enabled) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = when {
+                !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                selected -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.semantics { contentDescription = description },
+        )
     }
 }

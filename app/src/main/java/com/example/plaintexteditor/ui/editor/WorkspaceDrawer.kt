@@ -39,6 +39,9 @@ import com.example.plaintexteditor.data.workspace.WorkspaceStore
  * @param onFileClick 点树里的文件时调用（把路径交给编辑区）
  * @param onMessage 显示一条提示
  * @param onTreeChanged 树里做完重命名/删除后调用，触发刷新
+ * @param dirtyPath 当前有未保存修改的文件路径（树里会给它加 *）
+ * @param onRemoveWorkspace 请求把某个工作区移出（未保存时由外面提示保存或丢弃）
+ * @param onPathRenamed 改名后通知外面，用来同步正在编辑的路径
  */
 @Composable
 fun WorkspaceDrawer(
@@ -46,11 +49,14 @@ fun WorkspaceDrawer(
     repository: FileRepository,
     workspaceStore: WorkspaceStore,
     refreshKey: Int,
+    dirtyPath: String?,
     onBrowsePrivateDirectoryClick: () -> Unit,
     onOpenSettingsClick: () -> Unit,
     onFileClick: (FileItem) -> Unit,
     onMessage: (String) -> Unit,
     onTreeChanged: () -> Unit,
+    onRemoveWorkspace: (FileItem) -> Unit,
+    onPathRenamed: (String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ModalDrawerSheet(modifier = modifier) {
@@ -79,6 +85,9 @@ fun WorkspaceDrawer(
                 onFileClick = onFileClick,
                 onMessage = onMessage,
                 onTreeChanged = onTreeChanged,
+                dirtyPath = dirtyPath,
+                onRemoveWorkspace = onRemoveWorkspace,
+                onPathRenamed = onPathRenamed,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
