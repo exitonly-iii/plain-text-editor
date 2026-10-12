@@ -30,3 +30,6 @@ Thumbs.db
 
 # 将来如果生成了 gradle-wrapper.jar，可以允许它被提交（Gradle 官方推荐提交）
 !gradle/wrapper/gradle-wrapper.jar
+
+# 本地开发文档：只给自己/同事看，不进仓库
+开发说明.md
