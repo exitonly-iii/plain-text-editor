@@ -15,6 +15,7 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -168,19 +169,33 @@ fun PlainTextEditor(
             }
 
             val footer = View(context)
-            ScrollView(context).apply {
-                isFillViewport = true
-                isSmoothScrollingEnabled = true
+
+            // 注意：ScrollView 只能有一个直接子视图（多放一个会直接抛异常闪退），
+            // 所以里面先放一个竖直线性布局，再把编辑控件和空白尾巴放进这个布局。
+            val content = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
                 addView(
                     editText,
-                    ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
                     ),
                 )
                 addView(
                     footer,
-                    ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0),
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0),
+                )
+            }
+
+            ScrollView(context).apply {
+                isFillViewport = true
+                isSmoothScrollingEnabled = true
+                addView(
+                    content,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ),
                 )
                 // 空白尾巴的高度跟着可视区域走（约 0.9 屏）
                 addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
@@ -195,7 +210,8 @@ fun PlainTextEditor(
         },
         update = { root ->
             val scrollView = root as? ScrollView ?: return@AndroidView
-            val editText = scrollView.getChildAt(0) as? EditText ?: return@AndroidView
+            val container = scrollView.getChildAt(0) as? ViewGroup ?: return@AndroidView
+            val editText = container.getChildAt(0) as? EditText ?: return@AndroidView
 
             // 主题换了颜色也要跟着换
             if (editText.currentTextColor != currentTextColor) {
