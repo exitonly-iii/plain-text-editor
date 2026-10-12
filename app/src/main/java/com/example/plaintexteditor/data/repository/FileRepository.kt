@@ -76,7 +76,7 @@ class FileRepository(
     ): Result<FileItem> = io {
         val parent = resolveDirectory(parentPath)
         val target = File(parent, checkName(name))
-        if (target.exists()) throw IOException("已存在同名文件夹：$name")
+        if (target.exists()) throw IOException("这里已经有叫「$name」的文件或文件夹了，换个名字吧")
         if (!target.mkdirs()) throw IOException("创建文件夹失败：$name")
         target.toFileItem()
     }
@@ -89,7 +89,7 @@ class FileRepository(
     ): Result<FileItem> = io {
         val parent = resolveDirectory(parentPath)
         val target = File(parent, checkName(name))
-        if (target.exists()) throw IOException("已存在同名文件：$name")
+        if (target.exists()) throw IOException("这里已经有叫「$name」的文件或文件夹了，换个名字吧")
         if (!target.createNewFile()) throw IOException("创建文件失败：$name")
         if (content.isNotEmpty()) target.writeText(content)
         target.toFileItem()
@@ -106,7 +106,7 @@ class FileRepository(
         val parent = source.parentFile ?: throw IOException("不能重命名根目录")
         val target = File(parent, checkName(newName))
         if (target.canonicalPath != source.canonicalPath) {
-            if (target.exists()) throw IOException("已存在同名项目：$newName")
+            if (target.exists()) throw IOException("这里已经有叫「$newName」的文件或文件夹了，换个名字吧")
             if (!source.renameTo(target)) throw IOException("重命名失败：${source.name}")
         }
         target.toFileItem()

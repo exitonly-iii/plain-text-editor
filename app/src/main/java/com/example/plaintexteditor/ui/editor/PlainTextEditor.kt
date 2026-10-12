@@ -1,17 +1,21 @@
 package com.example.plaintexteditor.ui.editor
 
 import android.content.Context
-import android.view.ActionMode
-import android.view.Menu
-import android.view.MenuItem
 import android.graphics.Color as AndroidColor
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
 import android.util.TypedValue
+import android.view.ActionMode
 import android.view.Gravity
+import android.view.Menu
+import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ScrollView
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -67,13 +71,14 @@ data class SelectionRequest(
 /**
  * 编辑区（真正的文本输入控件）。
  *
- * 为什么这里用 AndroidView + EditText，而不是 Compose 自带的 TextField？
- * 因为系统的 EditText 才是后续做编辑器（大文件、撤销、光标、选区、输入法细节）最稳的地基。
- * 现在先把它包好，第二阶段只要把文件内容传进来就能直接编辑。
+ * 结构是：ScrollView → [EditText, 空白尾巴]
+ * - 文字放在 EditText 里（多行、可选中、可复制粘贴，不自己做滚动）
+ * - 后面跟一个约 0.9 屏高的空白视图：内容满屏时还能继续往上拉，
+ *   光标可以停在屏幕上半部分，而多出来的只是空白，不会产生新行
  *
  * @param text 当前文本（由上层保存，控件只负责显示和回调）
  * @param onTextChange 用户每打一个字都会回调一次，把最新文本交回上层
- * @param monospace 是否用等宽字体。默认 false = 用系统默认字体（本阶段的要求）
+ * @param monospace 是否用等宽字体。默认 false = 用系统默认字体
  * @param selectionRequest 一次性请求：把光标 / 选区放到指定位置（查找跳转、替换后定位用）
  * @param onCursorOffsetChanged 光标移动时回调（传字符偏移量），用来算“当前在第几行”
  * @param fontSizeSp 字号（sp），来自设置页
@@ -89,7 +94,6 @@ fun PlainTextEditor(
     onCursorOffsetChanged: (Int) -> Unit = {},
     fontSizeSp: Float = 16f,
 ) {
-    // 始终拿到最新的回调函数，避免控件里存着旧的 lambda
     val currentOnTextChange by rememberUpdatedState(newValue = onTextChange)
     val currentOnCursorMoved by rememberUpdatedState(newValue = onCursorOffsetChanged)
     val currentTextColor = MaterialTheme.colorScheme.onSurface.toArgb()
@@ -101,10 +105,10 @@ fun PlainTextEditor(
             val horizontalPadding = (16 * density).toInt()
             val verticalPadding = (12 * density).toInt()
 
-            CursorTrackingEditText(context).apply {
+            val editText = CursorTrackingEditText(context).apply {
                 onCursorMoved = { offset -> currentOnCursorMoved(offset) }
 
-                // 去掉 EditText 自带的背景（那是一条下划线），让它铺满整个编辑区
+                // 去掉 EditText 自带的背景（那是一条下划线）
                 setBackgroundColor(AndroidColor.TRANSPARENT)
                 gravity = Gravity.TOP or Gravity.START
 
@@ -114,19 +118,18 @@ fun PlainTextEditor(
                     InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
                 setSingleLine(false)
 
-                // 让文字自动换行，而不是横向滚动
+                // 文字自动换行；纵向滚动交给外面的 ScrollView，控件自身不滚动
                 setHorizontallyScrolling(false)
-                setVerticalScrollBarEnabled(true)
+                setVerticalScrollBarEnabled(false)
 
-                // 字体：默认用系统默认字体；想要等宽字体（看代码更整齐）就传 monospace = true
+                // 字体：默认系统字体；要等宽字体就传 monospace = true
                 typeface = if (monospace) Typeface.MONOSPACE else Typeface.DEFAULT
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSizeSp)
                 setLineSpacing(0f, 1.2f)
                 setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
                 setTextColor(currentTextColor)
 
-                // 长按选中的浮动菜单：去掉系统/输入法塞进来的「AI 帮写」与「分享」，
-                // 只保留全选、剪切、复制、粘贴这些基础操作
+                // 长按选中的浮动菜单：去掉系统/输入法塞进来的「AI 帮写」与「分享」
                 customSelectionActionModeCallback = object : ActionMode.Callback {
                     override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
                         menu?.let { stripExtraSelectionItems(it) }
@@ -141,20 +144,6 @@ fun PlainTextEditor(
                     override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean = false
 
                     override fun onDestroyActionMode(mode: ActionMode?) = Unit
-                }
-
-                // 底部留出约 0.9 屏的空白：内容满屏时也能继续往上拉，
-                // 光标可以停在上方，而不是被按在最底部（不产生新行）
-                addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                    val footer = (view.height * 0.9f).toInt()
-                    if (view.paddingBottom != footer) {
-                        view.setPadding(
-                            view.paddingLeft,
-                            view.paddingTop,
-                            view.paddingRight,
-                            footer,
-                        )
-                    }
                 }
 
                 addTextChangedListener(object : TextWatcher {
@@ -177,8 +166,37 @@ fun PlainTextEditor(
                     }
                 })
             }
+
+            val footer = View(context)
+            ScrollView(context).apply {
+                isFillViewport = true
+                isSmoothScrollingEnabled = true
+                addView(
+                    editText,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ),
+                )
+                addView(
+                    footer,
+                    ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0),
+                )
+                // 空白尾巴的高度跟着可视区域走（约 0.9 屏）
+                addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                    val target = (view.height * 0.9f).toInt()
+                    val params = footer.layoutParams
+                    if (params != null && params.height != target) {
+                        params.height = target
+                        footer.layoutParams = params
+                    }
+                }
+            }
         },
-        update = { editText ->
+        update = { root ->
+            val scrollView = root as? ScrollView ?: return@AndroidView
+            val editText = scrollView.getChildAt(0) as? EditText ?: return@AndroidView
+
             // 主题换了颜色也要跟着换
             if (editText.currentTextColor != currentTextColor) {
                 editText.setTextColor(currentTextColor)
@@ -195,8 +213,7 @@ fun PlainTextEditor(
             }
 
             // 只有“外部文本”和“控件里的文本”不一致时才回写内容。
-            // 否则用户每打一个字，光标都会被重置。
-            // 打开新文件时把光标放到开头。
+            // 否则用户每打一个字，光标都会被重置。打开新文件时把光标放到开头。
             if (editText.text.toString() != text) {
                 editText.setText(text)
                 editText.setSelection(0)
@@ -212,9 +229,16 @@ fun PlainTextEditor(
                 val end = request.end.coerceIn(0, length)
                 editText.requestFocus()
                 editText.setSelection(minOf(start, end), maxOf(start, end))
-                // 让选中的位置滚到可见区域；个别机型不支持时忽略即可
-                runCatching { editText.bringPointIntoView(end) }
+                bringIntoView(scrollView, editText, end)
             }
         },
     )
+}
+
+/** 让光标所在的那一行滚进可见区域（滚动由 ScrollView 负责） */
+private fun bringIntoView(scrollView: ScrollView, editText: EditText, offset: Int) {
+    val layout = editText.layout ?: return
+    val line = layout.getLineForOffset(offset.coerceIn(0, editText.text.length))
+    val rect = Rect(0, layout.getLineTop(line), editText.width, layout.getLineBottom(line))
+    runCatching { scrollView.requestChildRectangleOnScreen(editText, rect, true) }
 }
